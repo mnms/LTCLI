@@ -118,27 +118,18 @@ def create(host_port_list, max_slots=1024):
 
         slots_each = SLOT_COUNT // len(conns)
         slots_residue = SLOT_COUNT - slots_each * len(conns)
-        first_node_slots = slots_residue + slots_each
+        slots_each += 1
+        prev = 0
 
-        msg = message.get('adding_slot')
-        logger.info(msg)
-        logger.info(' - {}:{}, {}'.format(
-            first_conn.host,
-            first_conn.port,
-            slots_residue + slots_each,
-        ))
-        _add_slots_range(first_conn, 0, first_node_slots, max_slots)
-        sleep(0.02)
-        logging.info('Add %d slots to %s:%d', slots_residue + slots_each,
-                     first_conn.host, first_conn.port)
-        for i, t in enumerate(conns[1:]):
+        for i, t in enumerate(conns[0:]):
+            if i == slots_residue:
+                slots_each -= 1
             msg = ' - {}:{}, {}'.format(t.host, t.port, slots_each)
             logger.info(msg)
-            _add_slots_range(t, i * slots_each + first_node_slots,
-                             (i + 1) * slots_each + first_node_slots,
-                             max_slots)
+            _add_slots_range(t, prev, prev + slots_each, max_slots)
             sleep(0.02)
             logging.info('Add %d slots to %s:%d', slots_each, t.host, t.port)
+            prev = prev + slots_each
         msg = message.get('check_cluster_state_assign_slot')
         logger.info(msg)
         for t in conns:
