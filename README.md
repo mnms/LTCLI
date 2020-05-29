@@ -20,6 +20,8 @@
 
 [Logging in file](#logging-in-file)
 
+[PYPI 등록 가이드](https://tde.sktelecom.com/wiki/pages/viewpage.action?spaceKey=BDFLASH&title=LTCLI&)
+
 </br>
 </br>
 
