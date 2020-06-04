@@ -167,8 +167,8 @@ class Center(object):
                     count = 0
                 count += 1
                 ssd_no = config.get_sata_ssd_no(port, ssd_count)
-                sr2_redis_data = '{}{}/{}'.format(prefix_srd, ssd_no, user)
-                sr2_flash_db_path = '{}{}/{}/db/db-{}'.format(
+                sr2_redis_data = '{}{}/nvkvs/{}'.format(prefix_srd, ssd_no, user)
+                sr2_flash_db_path = '{}{}/nvkvs/{}/db/db-{}'.format(
                     prefix_sfdp,
                     ssd_no,
                     user,
@@ -199,8 +199,8 @@ class Center(object):
                     count = 0
                 count += 1
                 ssd_no = config.get_sata_ssd_no(port, ssd_count)
-                sr2_redis_data = '{}{}/{}'.format(prefix_srd, ssd_no, user)
-                sr2_flash_db_path = '{}{}/{}/db/db-{}'.format(
+                sr2_redis_data = '{}{}/nvkvs/{}'.format(prefix_srd, ssd_no, user)
+                sr2_flash_db_path = '{}{}/nvkvs/{}/db/db-{}'.format(
                     prefix_sfdp,
                     ssd_no,
                     user,
@@ -557,12 +557,12 @@ class Center(object):
                     count = 0
                 count += 1
                 ssd_no = config.get_sata_ssd_no(port, ssd_count)
-                sr2_redis_data = '{}{}/{}'.format(
+                sr2_redis_data = '{}{}/nvkvs/{}'.format(
                     prefix_srd,
                     ssd_no,
                     user
                 )
-                sr2_flash_db_path = '{}{}/{}/db/db-{}'.format(
+                sr2_flash_db_path = '{}{}/nvkvs/{}/db/db-{}'.format(
                     prefix_sfdp,
                     ssd_no,
                     user,
@@ -715,12 +715,12 @@ class Center(object):
                 count = 0
             count += 1
             ssd_no = config.get_sata_ssd_no(port, ssd_count)
-            sr2_redis_data = '{}{}/{}'.format(
+            sr2_redis_data = '{}{}/nvkvs/{}'.format(
                 prefix_srd,
                 ssd_no,
                 user
             )
-            sr2_flash_db_path = '{}{}/{}/db/db-{}'.format(
+            sr2_flash_db_path = '{}{}/nvkvs/{}/db/db-{}'.format(
                 prefix_sfdp,
                 ssd_no,
                 user,
