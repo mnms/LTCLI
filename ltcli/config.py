@@ -292,11 +292,11 @@ def get_ssd_disk_position(port, digit=2):
     flash_db_path_prefix = get_props(props_path, 'sr2_flash_db_path')
     redis_data = os.path.join(
         redis_data_prefix + get_sata_ssd_no(port, ssd_count, digit),
-        user,
+        'nvkvs',user,
     )
     flash_db_path = os.path.join(
         flash_db_path_prefix + get_sata_ssd_no(port, ssd_count, digit),
-        user,
+        'nvkvs',user,
         'db/db-{port}'.format(port=port),
     )
     redis_dump = os.path.join(redis_data, 'dump')
