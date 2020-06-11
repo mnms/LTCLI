@@ -755,7 +755,7 @@ class Center(object):
                 count = 0
             count += 1
             ssd_no = config.get_sata_ssd_no(port, ssd_count)
-            sr2_redis_data = '{}{}/{}'.format(prefix_srd, ssd_no, user)
+            sr2_redis_data = '{}{}/nvkvs/{}'.format(prefix_srd, ssd_no, user)
             file_name = 'nodes-{}.conf'.format(port)
             file_path = os.path.join(sr2_redis_data, file_name)
             command.append(file_path)
