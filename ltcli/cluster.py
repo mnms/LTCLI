@@ -202,9 +202,8 @@ class Cluster(object):
         center = Center()
         center.update_ip_port()
         success = center.check_hosts_connection()
-        if not success:
-            return
-        center.stop_redis(force=True)
+        if success:
+            center.stop_redis(force=True)
         if logs:
             center.remove_all_of_redis_log_force()
             return
@@ -625,7 +624,10 @@ class Cluster(object):
         if not cluster_util.validate_id(cluster_id):
             raise ClusterIdError(cluster_id)
         center = Center()
-        center.stop_redis(force=True)
+        center.update_ip_port()
+        success = center.check_hosts_connection()
+        if success:
+            center.stop_redis(force=True)
         path_of_fb = config.get_path_of_fb(cluster_id)
         props_path = path_of_fb['redis_properties']
         hosts = config.get_props(props_path, 'sr2_redis_master_hosts', [])
