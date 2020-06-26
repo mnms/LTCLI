@@ -201,6 +201,9 @@ class Cluster(object):
             return
         center = Center()
         center.update_ip_port()
+        success = center.check_hosts_connection()
+        if success:
+            center.stop_redis(force=True)
         if logs:
             center.remove_all_of_redis_log_force()
             return
@@ -620,13 +623,18 @@ class Cluster(object):
         """
         if not cluster_util.validate_id(cluster_id):
             raise ClusterIdError(cluster_id)
+        center = Center()
+        center.update_ip_port()
+        success = center.check_hosts_connection()
+        if success:
+            center.stop_redis(force=True)
         path_of_fb = config.get_path_of_fb(cluster_id)
         props_path = path_of_fb['redis_properties']
         hosts = config.get_props(props_path, 'sr2_redis_master_hosts', [])
         tag = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         cluster_backup_dir = 'cluster_{}_bak_{}'.format(cluster_id, tag)
         for host in hosts:
-            Center().cluster_backup(host, cluster_id, cluster_backup_dir)
+            center.cluster_backup(host, cluster_id, cluster_backup_dir)
         msg = message.get('cluster_delete_complete')
         msg = msg.format(cluster_id=cluster_id)
         logger.info(msg)

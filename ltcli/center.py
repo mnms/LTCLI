@@ -221,7 +221,7 @@ class Center(object):
         command = ' '.join(command)
         subprocess.check_output(command, shell=True)
         logger.debug('subprocess: {}'.format(command))
-        command = 'find {} -type f | xargs -i cp "{{}}" {}'.format(
+        command = 'find {} -type f | xargs -I"{{}}" cp "{{}}" {}'.format(
             sr2_redis_conf_temp,
             sr2_redis_conf
         )
