@@ -36,6 +36,10 @@ class RedisCliInfo(object):
         """Command: redis-cli info replication"""
         RedisCliUtil.command('info replication', host=host, port=port)
 
+    def alert(self, host=None, port=None):
+        """Command: redis-cli info alert"""
+        RedisCliUtil.command('info alert', host=host, port=port)
+
 
 class RedisCliCluster(object):
     def __init__(self):
