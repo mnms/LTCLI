@@ -232,14 +232,13 @@ def _deploy_zero_downtime(cluster_id):
         client.close()
 
     # restart slave
-    center.stop_redis(master=False)
-    center.configure_redis(master=False)
+    center.stop_current_nodes(False, True)
+    center.configure_redis()
     center.sync_conf()
-    center.start_redis_process(master=False)
-    center.wait_until_all_redis_process_up()
+    center.start_current_nodes(False, True)
 
-    # check slave is alive
-    slaves_for_failover = center.check_all_master_have_alive_slave()
+    center.wait_until_all_redis_process_up()
+    slaves_for_failover = center.get_slave_nodes()
 
     key = 'cluster-node-timeout'
     origin_m_value = center.cli_config_get(key, m_hosts[0], m_ports[0])
@@ -277,10 +276,10 @@ def _deploy_zero_downtime(cluster_id):
         return
 
     # restart master (current slave)
-    center.stop_redis(slave=False)
+    center.stop_current_nodes(True, False)
     center.configure_redis(slave=False)
     center.sync_conf()
-    center.start_redis_process(slave=False)
+    center.start_current_nodes(True, False)
     center.wait_until_all_redis_process_up()
 
     # change host info of redis.properties

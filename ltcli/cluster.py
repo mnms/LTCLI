@@ -508,6 +508,26 @@ class Cluster(object):
             output_msg.append('')
         logger.info(color.ENDC + '\n'.join(output_msg))
 
+    def cstop(self, master=True, slave=True):
+        """Stop current masters or slaves
+        """
+        center = Center()
+        center.update_ip_port()
+        success = center.check_hosts_connection()
+        if not success:
+            return
+        center.stop_current_nodes(master, slave)
+
+    def cstart(self, master=True, slave=True):
+        """Start current masters or slaves
+        """
+        center = Center()
+        center.update_ip_port()
+        success = center.check_hosts_connection()
+        if not success:
+            return
+        center.start_current_nodes(master, slave)
+
     def _print(self, text):
         if self._print_mode == 'screen':
             logger.info(text)
