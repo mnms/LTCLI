@@ -1332,10 +1332,9 @@ class Center(object):
             for master_node in master_nodes:
                 (host, port) = master_node['addr'].split(':')
                 ports = [port]
-                msg = 'host: {} port: {}'.format(host, port)
+                msg = 'stop {}:{}'.format(host, port)
                 output_msg.append(msg)
                 self.stop_redis_process(host, ports, force)
-                output_msg.append('')
 
             max_try_count = 10
             alive_count = 0
@@ -1346,7 +1345,7 @@ class Center(object):
                     ports = [port]
                     alive_count += self.get_alive_redis_count(hosts, ports, False)
 
-                msg = 'Alive - host: {} port: {} count:{}'.format(host, port, alive_count)
+                msg = 'Alive count:{}'.format(alive_count)
                 output_msg.append(msg)
 
                 if alive_count <= 0:
@@ -1359,7 +1358,7 @@ class Center(object):
                     for slave_node in master_nodes:
                         (host, port) = slave_node.split(':')
                         ports = [port]
-                        msg = 'host: {} port: {}'.format(host, port)
+                        msg = 'stop {}:{} --force'.format(host, port)
                         output_msg.append(msg)
                         self.stop_redis_process(host, ports, True)
                 time.sleep(1)
@@ -1380,10 +1379,9 @@ class Center(object):
             for slave_node in slave_nodes:
                 (host, port) = slave_node.split(':')
                 ports = [port]
-                msg = 'host: {} port: {}'.format(host, port)
+                msg = 'stop {}:{}'.format(host, port)
                 output_msg.append(msg)
                 self.stop_redis_process(host, ports, force)
-                output_msg.append('')
 
             max_try_count = 10
             alive_count = 0
@@ -1394,7 +1392,7 @@ class Center(object):
                     ports = [port]
                     alive_count += self.get_alive_redis_count(hosts, ports, False)
 
-                msg = 'Alive - host: {} port: {} count:{}'.format(host, port, alive_count)
+                msg = 'Alive count:{}'.format(alive_count)
                 output_msg.append(msg)
 
                 if alive_count <= 0:
@@ -1407,7 +1405,7 @@ class Center(object):
                     for slave_node in slave_nodes:
                         (host, port) = slave_node.split(':')
                         ports = [port]
-                        msg = 'host: {} port: {}'.format(host, port)
+                        msg = 'stop {}:{} --force'.format(host, port)
                         output_msg.append(msg)
                         self.stop_redis_process(host, ports, True)
                 time.sleep(1)
@@ -1439,7 +1437,7 @@ class Center(object):
                 (host, port) = master_node['addr'].split(':')
                 ports = [port]
                 self.run_redis_process(host, ports, False, current_time)
-                msg = 'start - host: {} port: {}'.format(host, port)
+                msg = 'start {}:{}'.format(host, port)
                 output_msg.append(msg)
             center.wait_until_all_redis_process_up()
 
@@ -1459,15 +1457,12 @@ class Center(object):
                     logger.debug("slave_node {}".format(master_node))
                     addr = slave_node['addr']
                     slave_nodes.append(addr)
-            count = len(slave_nodes)
-            msg = 'count: {}'.format(count)
-            output_msg.append(msg)
 
             for slave_node in slave_nodes:
                 (host, port) = slave_node.split(':')
                 ports = [port]
                 self.run_redis_process(host, ports, False, current_time)
-                msg = 'start - host: {} port: {}'.format(host, port)
+                msg = 'start {}:{}'.format(host, port)
                 output_msg.append(msg)
             center.wait_until_all_redis_process_up()
 
