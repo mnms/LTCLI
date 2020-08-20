@@ -276,10 +276,10 @@ def _deploy_zero_downtime(cluster_id):
         return
 
     # restart master (current slave)
-    center.stop_current_nodes(master=True, slave=False)
+    center.stop_current_nodes(master=False, slave=True)
     center.configure_redis(slave=False)
     center.sync_conf()
-    center.start_current_nodes(master=True, slave=False)
+    center.start_current_nodes(master=False, slave=True)
     center.wait_until_all_redis_process_up()
 
     # change host info of redis.properties
