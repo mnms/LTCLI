@@ -1239,8 +1239,17 @@ class Center(object):
 
         cluster_nodes = self.get_cluster_nodes()
         if 'Redis is loading the dataset' in cluster_nodes:
-            msg = message.get('loading_dataset')
-            raise ClusterRedisError(msg)
+            # Need time to sync(full sync)
+            count_loading_data = 0
+            logger.debug("get_cluster_nodes() {}".format("Check if all nodes load data successfully."))
+            while count_loading_data == 0:
+                cluster_nodes = self.get_cluster_nodes()
+                if 'Redis is loading the dataset' in cluster_nodes:
+                    logger.debug("get_cluster_nodes() {}".format('Loading data is not completed.'))
+                    time.sleep(3)
+                else:
+                    count_loading_data = 1
+
         logger.debug('result of cluster nodes: {}'.format(cluster_nodes))
         nodes_info = cluster_nodes.split('\n')
         master_nodes_info = []
