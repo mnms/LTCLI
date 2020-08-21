@@ -1335,9 +1335,9 @@ class Center(object):
         master_nodes = center.get_master_obj_list()
         output_msg = []
 
-        output_msg.append('Masters...')
         # Stop masters
         if master == True:
+            output_msg.append('Masters...')
             for master_node in master_nodes:
                 (host, port) = master_node['addr'].split(':')
                 ports = [port]
@@ -1372,10 +1372,10 @@ class Center(object):
                         self.stop_redis_process(host, ports, True)
                 time.sleep(1)
 
-        output_msg.append('Slaves...')
         slave_nodes = []
         #Stop slaves
         if slave == True:
+            output_msg.append('Slaves...')
             for master_node in master_nodes:
                 for slave_node in master_node['slaves']:
                     logger.debug("slave_node {}".format(master_node))
@@ -1433,9 +1433,9 @@ class Center(object):
 
         current_time = time.strftime("%Y%m%d-%H%M", time.gmtime())
 
-        output_msg.append('Masters...')
         # Start masters
         if master == True:
+            output_msg.append('Masters...')
             center.backup_server_logs(master=True, slave=False)
             center.create_redis_data_directory()
 
@@ -1450,10 +1450,10 @@ class Center(object):
                 output_msg.append(msg)
             center.wait_until_all_redis_process_up()
 
-        output_msg.append('Slaves...')
         slave_nodes = []
         #Start slaves
         if slave == True:
+            output_msg.append('Slaves...')
             center.backup_server_logs(master=False, slave=True)
             center.create_redis_data_directory()
 

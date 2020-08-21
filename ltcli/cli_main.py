@@ -282,27 +282,6 @@ def _deploy_zero_downtime(cluster_id):
     center.start_current_nodes(master=False, slave=True)
     center.wait_until_all_redis_process_up()
 
-    # change host info of redis.properties
-    props_path = path_of_fb['redis_properties']
-    after_m_ports = list(set(map(
-        lambda x: int(x.split(':')[1]),
-        slaves_for_failover
-    )))
-    after_s_ports = list(set(s_ports + m_ports) - set(after_m_ports))
-    logger.debug("master port {}".format(m_ports))
-    logger.debug("slave port {}".format(s_ports))
-    key = 'sr2_redis_master_ports'
-    logger.debug("next master port {}".format(after_m_ports))
-    value = cluster_util.convert_list_2_seq(after_m_ports)
-    logger.debug("converted {}".format(value))
-    config.set_props(props_path, key, value)
-    key = 'sr2_redis_slave_ports'
-    logger.debug("next slave port {}".format(after_s_ports))
-    value = cluster_util.convert_list_2_seq(after_s_ports)
-    logger.debug("converted {}".format(value))
-    config.set_props(props_path, key, value)
-
-
 def _deploy(cluster_id, history_save, clean):
     deploy_state = DeployUtil().get_state(cluster_id)
     if deploy_state == DEPLOYED:
