@@ -99,6 +99,16 @@ def metakeys(key, all=False, host=None, port=0):
     _command(sub_cmd, all, host, port)
 
 
+def relmodeltest(host='localhost', port=7379):
+    """Execute unit test
+
+    :param host: host info for redis
+    :param port: port info for redis
+    """
+    sub_cmd = 'relmodeltest'
+    _command(sub_cmd, False, host, port)
+
+
 class Cli(object):
     """Command wrapper of redis-cli
     """
@@ -111,3 +121,4 @@ class Cli(object):
         self.reset_oom = reset_oom
         self.reset_info = reset_info
         self.metakeys = metakeys
+        self.relmodeltest = relmodeltest
