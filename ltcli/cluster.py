@@ -371,7 +371,7 @@ class Cluster(object):
         """
         center = Center()
         center.update_ip_port()
-        logger.debug('rowcount')
+        logger.debug('distribution')
         ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
         outs = ''
         for _, host, port, res, stdout in ret:
@@ -409,7 +409,7 @@ class Cluster(object):
     def rowcount(self):
         """Query and show cluster row count
         """
-        logger.debug('distribution')
+        logger.debug('rowcount')
 
         # open-redis-cli-all info Tablespace | grep totalRows | awk -F ',
         # ' '{print $4}' | awk -F '=' '{sum += $2} END {print sum}'
