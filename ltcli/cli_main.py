@@ -232,14 +232,13 @@ def _deploy_zero_downtime(cluster_id):
         client.close()
 
     # restart slave
-    center.stop_redis(master=False)
-    center.configure_redis(master=False)
+    center.stop_current_nodes(master=False, slave=True)
+    center.configure_redis()
     center.sync_conf()
-    center.start_redis_process(master=False)
-    center.wait_until_all_redis_process_up()
+    center.start_current_nodes(master=False, slave=True)
 
-    # check slave is alive
-    slaves_for_failover = center.check_all_master_have_alive_slave()
+    center.wait_until_all_redis_process_up()
+    slaves_for_failover = center.get_slave_nodes()
 
     key = 'cluster-node-timeout'
     origin_m_value = center.cli_config_get(key, m_hosts[0], m_ports[0])
@@ -277,32 +276,11 @@ def _deploy_zero_downtime(cluster_id):
         return
 
     # restart master (current slave)
-    center.stop_redis(slave=False)
+    center.stop_current_nodes(master=False, slave=True)
     center.configure_redis(slave=False)
     center.sync_conf()
-    center.start_redis_process(slave=False)
+    center.start_current_nodes(master=False, slave=True)
     center.wait_until_all_redis_process_up()
-
-    # change host info of redis.properties
-    props_path = path_of_fb['redis_properties']
-    after_m_ports = list(set(map(
-        lambda x: int(x.split(':')[1]),
-        slaves_for_failover
-    )))
-    after_s_ports = list(set(s_ports + m_ports) - set(after_m_ports))
-    logger.debug("master port {}".format(m_ports))
-    logger.debug("slave port {}".format(s_ports))
-    key = 'sr2_redis_master_ports'
-    logger.debug("next master port {}".format(after_m_ports))
-    value = cluster_util.convert_list_2_seq(after_m_ports)
-    logger.debug("converted {}".format(value))
-    config.set_props(props_path, key, value)
-    key = 'sr2_redis_slave_ports'
-    logger.debug("next slave port {}".format(after_s_ports))
-    value = cluster_util.convert_list_2_seq(after_s_ports)
-    logger.debug("converted {}".format(value))
-    config.set_props(props_path, key, value)
-
 
 def _deploy(cluster_id, history_save, clean):
     deploy_state = DeployUtil().get_state(cluster_id)
