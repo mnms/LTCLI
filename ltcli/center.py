@@ -1239,8 +1239,17 @@ class Center(object):
 
         cluster_nodes = self.get_cluster_nodes()
         if 'Redis is loading the dataset' in cluster_nodes:
-            msg = message.get('loading_dataset')
-            raise ClusterRedisError(msg)
+            # Need time to sync(full sync)
+            count_loading_data = 0
+            logger.debug("get_cluster_nodes() {}".format("Check if all nodes load data successfully."))
+            while count_loading_data == 0:
+                cluster_nodes = self.get_cluster_nodes()
+                if 'Redis is loading the dataset' in cluster_nodes:
+                    logger.debug("get_cluster_nodes() {}".format('Loading data is not completed.'))
+                    time.sleep(3)
+                else:
+                    count_loading_data = 1
+
         logger.debug('result of cluster nodes: {}'.format(cluster_nodes))
         nodes_info = cluster_nodes.split('\n')
         master_nodes_info = []
@@ -1316,3 +1325,171 @@ class Center(object):
                 if port in in_use_ports:
                     conflict.append([host, port])
         return conflict
+
+    def stop_current_nodes(self, master=True, slave=True, force=False):
+        """Stop current masters or slaves
+        """
+        logger.debug("stop_current_nodes master:{}, slave:{} -- force:{}".format(master, slave, force))
+        center = Center()
+        center.update_ip_port()
+        master_nodes = center.get_master_obj_list()
+        output_msg = []
+
+        # Stop masters
+        if master == True:
+            output_msg.append('Masters...')
+            for master_node in master_nodes:
+                (host, port) = master_node['addr'].split(':')
+                ports = [port]
+                msg = 'stop {}:{}'.format(host, port)
+                output_msg.append(msg)
+                self.stop_redis_process(host, ports, force)
+
+            max_try_count = 10
+            alive_count = 0
+            while max_try_count > 0:
+                for master_node in master_nodes:
+                    (host, port) = master_node['addr'].split(':')
+                    hosts = [host]
+                    ports = [port]
+                    alive_count += self.get_alive_redis_count(hosts, ports, False)
+
+                msg = 'Alive count:{}'.format(alive_count)
+                output_msg.append(msg)
+
+                if alive_count <= 0:
+                    msg = message.get('complete_stop_slave_cluster')
+                    logger.info(msg)
+                    success = True
+                    break
+                max_try_count -= 1
+                if max_try_count <= 2:
+                    for slave_node in master_nodes:
+                        (host, port) = slave_node.split(':')
+                        ports = [port]
+                        msg = 'stop {}:{} --force'.format(host, port)
+                        output_msg.append(msg)
+                        self.stop_redis_process(host, ports, True)
+                time.sleep(1)
+
+        slave_nodes = []
+        #Stop slaves
+        if slave == True:
+            output_msg.append('Slaves...')
+            for master_node in master_nodes:
+                for slave_node in master_node['slaves']:
+                    logger.debug("slave_node {}".format(master_node))
+                    addr = slave_node['addr']
+                    slave_nodes.append(addr)
+            count = len(slave_nodes)
+            msg = 'count: {}'.format(count)
+            output_msg.append(msg)
+
+            for slave_node in slave_nodes:
+                (host, port) = slave_node.split(':')
+                ports = [port]
+                msg = 'stop {}:{}'.format(host, port)
+                output_msg.append(msg)
+                self.stop_redis_process(host, ports, force)
+
+            max_try_count = 10
+            alive_count = 0
+            while max_try_count > 0:
+                for slave_node in slave_nodes:
+                    (host, port) = slave_node.split(':')
+                    hosts = [host]
+                    ports = [port]
+                    alive_count += self.get_alive_redis_count(hosts, ports, False)
+
+                msg = 'Alive count:{}'.format(alive_count)
+                output_msg.append(msg)
+
+                if alive_count <= 0:
+                    msg = message.get('complete_stop_slave_cluster')
+                    logger.info(msg)
+                    success = True
+                    break
+                max_try_count -= 1
+                if max_try_count <= 2:
+                    for slave_node in slave_nodes:
+                        (host, port) = slave_node.split(':')
+                        ports = [port]
+                        msg = 'stop {}:{} --force'.format(host, port)
+                        output_msg.append(msg)
+                        self.stop_redis_process(host, ports, True)
+                time.sleep(1)
+
+        logger.info(color.ENDC + '\n'.join(output_msg))
+
+    def start_current_nodes(self, master=True, slave=True):
+        """Start current masters or slaves
+        """
+        logger.debug("start_current_nodes master:{}, slave:{}".format(master, slave))
+        center = Center()
+        center.update_ip_port()
+
+        master_nodes = center.get_master_obj_list()
+        output_msg = []
+
+        current_time = time.strftime("%Y%m%d-%H%M", time.gmtime())
+
+        # Start masters
+        if master == True:
+            output_msg.append('Masters...')
+            center.backup_server_logs(master=True, slave=False)
+            center.create_redis_data_directory()
+
+            # equal to cluster.configure()
+            center.configure_redis()
+            center.sync_conf(show_result=True)
+            for master_node in master_nodes:
+                (host, port) = master_node['addr'].split(':')
+                ports = [port]
+                self.run_redis_process(host, ports, False, current_time)
+                msg = 'start {}:{}'.format(host, port)
+                output_msg.append(msg)
+            center.wait_until_all_redis_process_up()
+
+        slave_nodes = []
+        #Start slaves
+        if slave == True:
+            output_msg.append('Slaves...')
+            center.backup_server_logs(master=False, slave=True)
+            center.create_redis_data_directory()
+
+            # equal to cluster.configure()
+            center.configure_redis()
+            center.sync_conf(show_result=True)
+
+            for master_node in master_nodes:
+                for slave_node in master_node['slaves']:
+                    logger.debug("slave_node {}".format(master_node))
+                    addr = slave_node['addr']
+                    slave_nodes.append(addr)
+
+            for slave_node in slave_nodes:
+                (host, port) = slave_node.split(':')
+                ports = [port]
+                self.run_redis_process(host, ports, False, current_time)
+                msg = 'start {}:{}'.format(host, port)
+                output_msg.append(msg)
+            center.wait_until_all_redis_process_up()
+
+        logger.info(color.ENDC + '\n'.join(output_msg))
+
+    def get_slave_nodes(self):
+        """Get current slave nodes
+        """
+
+        center = Center()
+        center.update_ip_port()
+        master_nodes = center.get_master_obj_list()
+
+        slave_nodes = []
+        for master_node in master_nodes:
+            for slave_node in master_node['slaves']:
+                logger.debug("slave_node {}".format(master_node))
+                addr = slave_node['addr']
+                slave_nodes.append(addr)
+
+        return slave_nodes
