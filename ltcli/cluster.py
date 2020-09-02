@@ -297,10 +297,51 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def distribution(self):
+        """Check the distribution of all masters and slaves
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('rowcount')
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                myself_key = 'myself'
+                filtered_lines = (filter(lambda x: myself_key in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        meta = []
+        for node in center.master_host_list:
+            num_of_masters = 0
+            num_of_slaves = 0
+
+            host_lines = (filter(lambda x: node in x, filtered_lines))
+            for node in host_lines:
+                params = node.split()
+                endpoint = params[1]
+                roles = params[2]
+                (host, port) = endpoint.split(':')
+                (myself, role) = roles.split(',')
+                if role == 'master':
+                    num_of_masters += 1
+                else:
+                    num_of_slaves += 1
+            meta.append(
+                [host,
+                num_of_masters,
+                num_of_slaves])
+
+        utils.print_table([['HOST', 'MASTER', 'SLAVE']] + meta)
+
     def rowcount(self):
         """Query and show cluster row count
         """
-        logger.debug('rowcount')
+        logger.debug('distribution')
+
         # open-redis-cli-all info Tablespace | grep totalRows | awk -F ',
         # ' '{print $4}' | awk -F '=' '{sum += $2} END {print sum}'
         ret = RedisCliUtil.command_all_async('info Tablespace', slave=False)
