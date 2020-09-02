@@ -297,6 +297,75 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def failover_list(self):
+        """ Find failovered|no-slave|no-slot masters and failbacked slaves
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('failover_list')
+        master_nodes = center.get_master_obj_list()
+        slave_nodes = center.get_slave_nodes()
+        master_ports = center.master_port_list
+        slave_ports = center.slave_port_list
+        output_msg = []
+
+        failovered_masters = []
+        for master_node in master_nodes:
+            addr = master_node['addr']
+            port = addr.split(':')[1]
+            try:
+                value = int(port)
+                if value in slave_ports:
+                    failovered_masters.append(addr)
+            except ValueError:
+                pass
+
+        noslave_masters = []
+        for master_node in master_nodes:
+            for slave_node in master_node['slaves']:
+                if slave_node['status'] == 'disconnected':
+                    noslave_masters.append(master_node['addr'])
+
+        noslot_masters = []
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                filtered_nodes = (filter(lambda x: 'myself,master' in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+        for line in filtered_nodes:
+            words = line.split()
+            if len(words) == 8:
+                noslot_masters.append(line.split()[1])
+
+        failbacked_slaves = []
+        for slave_nodes in slave_nodes:
+            port = slave_nodes.split(':')[1]
+            try:
+                value = int(port)
+                if value in master_ports:
+                    failbacked_slaves.append(slave_nodes)
+            except ValueError:
+                pass
+
+        output_msg.append('1) failovered masters:')
+        output_msg.extend(failovered_masters)
+        output_msg.append('')
+        output_msg.append('2) no-slave masters:')
+        output_msg.extend(noslave_masters)
+        output_msg.append('')
+        output_msg.append('3) no-slot masters:')
+        output_msg.extend(noslot_masters)
+        output_msg.append('')
+        output_msg.append('4) failbacked slaves:')
+        output_msg.extend(failbacked_slaves)
+        output_msg.append('')
+
+        logger.info(color.ENDC + '\n'.join(output_msg))
+
     def distribution(self):
         """Check the distribution of all masters and slaves
         """
