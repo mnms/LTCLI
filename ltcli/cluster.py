@@ -298,6 +298,50 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def reset_distribution(self):
+        """ Reset the distribution of masters and slaves with original setting
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('reset_distribution')
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+        slave_nodes = center.get_slave_nodes()
+        master_ports = center.master_port_list
+
+        for slave_node in slave_nodes:
+            (host, port) = slave_node.split(':')
+            try:
+                value = int(port)
+                if value in master_ports:
+                    # failover takeover
+                    msg = message.get('try_failover_takeover').format(slave=slave_node)
+                    self._print(msg)
+                    sub_cmd = 'cluster failover takeover'
+                    command = '{} {} -h {} -p {} {}'.format(
+                        ' '.join(env_cmd),
+                        redis_cli_cmd,
+                        host,
+                        port,
+                        sub_cmd,
+                    )
+                    stdout = subprocess.check_output(command, shell=True)
+                    outs = ''
+                    outs = '\n'.join([outs, stdout])
+                    self._print(outs)
+            except ValueError:
+                pass
+
     def do_replicate(self, slave, master):
         """ Replicate a slave node to a master node.
             Use like 'cluster replicate {slave's ip}:{slave's port} {master's ip}:{master's port}

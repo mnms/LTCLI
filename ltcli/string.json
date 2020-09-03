@@ -155,5 +155,6 @@
     "apply_after_restart": "Applies after restart.",
     "error_no_uuid": "Fail to find the master's uuid.",
     "error_need_cluster_meet": "The slave node is not belong to the cluster. Need 'cluster meet'.",
-    "start_replicate": "Start to replicate..."
+    "start_replicate": "Start to replicate...",
+    "try_failover_takeover": "'{slave}' will be master..."
 }
