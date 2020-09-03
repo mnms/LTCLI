@@ -449,6 +449,8 @@ class Cluster(object):
                 logger.warning("FAIL {}:{} {}".format(host, port, stdout))
 
         meta = []
+        total_masters = 0
+        total_slaves = 0
         for node in center.master_host_list:
             num_of_masters = 0
             num_of_slaves = 0
@@ -465,11 +467,17 @@ class Cluster(object):
                         num_of_masters += 1
                 else:
                     num_of_slaves += 1
+            total_masters += num_of_masters
+            total_slaves += num_of_slaves
             meta.append(
                 [host,
                 num_of_masters,
                 num_of_slaves])
 
+        meta.append(
+            ['TOTAL',
+             total_masters,
+             total_slaves])
         utils.print_table([['HOST', 'MASTER', 'SLAVE']] + meta)
 
     def rowcount(self):
