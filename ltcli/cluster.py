@@ -393,10 +393,11 @@ class Cluster(object):
                 params = node.split()
                 endpoint = params[1]
                 roles = params[2]
-                (host, port) = endpoint.split(':')
-                (myself, role) = roles.split(',')
+                host = endpoint.split(':')[0]
+                role = roles.split(',')[1]
                 if role == 'master':
-                    num_of_masters += 1
+                    if len(params) == 9:
+                        num_of_masters += 1
                 else:
                     num_of_slaves += 1
             meta.append(
