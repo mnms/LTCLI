@@ -297,6 +297,71 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def forget_noaddr(self):
+        """Forget noaddr nodes that is not used anymore in cluster
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('find_noaddr')
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        meta = []
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                filtered_lines = (filter(lambda x: 'noaddr' in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        total_list = []
+        for line in filtered_lines:
+            total_list.append(line.split()[0])
+
+        # Remove duplicates
+        unique_list = list(set(total_list))
+
+        # Forget noaddr uuid
+        for uuid in unique_list:
+            sub_cmd = 'cluster forget "{id}" 2>&1'.format(id=uuid)
+            ret = RedisCliUtil.command_all_async(sub_cmd, slave=True)
+            count = 0
+            for _, host, port, res, stdout in ret:
+                if res == 'OK':
+                    count += 1
+                    pass
+                else:
+                    logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+            msg = '{num} nodes have forgot {id}'.format(num=count, id=uuid)
+            self._print(msg)
+
+    def find_noaddr(self):
+        """Find noaddr nodes that is not used anymore in cluster
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('find_noaddr')
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        meta = []
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                filtered_lines = (filter(lambda x: 'noaddr' in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        total_list = []
+        for line in filtered_lines:
+            total_list.append(line.split()[0])
+
+        # Remove duplicates
+        unique_list = list(set(total_list))
+        for uuid in unique_list:
+            meta.append([uuid])
+        utils.print_table([['UUID']] + meta)
+
     def failover_list(self):
         """ Find failovered|no-slave|no-slot masters and failbacked slaves
         """
