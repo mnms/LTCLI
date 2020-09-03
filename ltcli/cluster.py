@@ -1,5 +1,6 @@
 import os
 from functools import reduce
+import subprocess
 import time
 
 from ltcli import color, config, cluster_util, net, utils, message
@@ -297,12 +298,99 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def do_replicate(self, slave, master):
+        """ Replicate a slave node to a master node.
+            Use like 'cluster replicate {slave's ip}:{slave's port} {master's ip}:{master's port}
+        """
+        logger.debug('do_replicate')
+        # Get master's uuid
+        s_host, s_port = slave.split(':')
+        m_host, m_port = master.split(':')
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+        sub_cmd = 'cluster nodes'
+        command = '{} {} -h {} -p {} {}'.format(
+            ' '.join(env_cmd),
+            redis_cli_cmd,
+            s_host,
+            s_port,
+            sub_cmd,
+        )
+        stdout = subprocess.check_output(command, shell=True)
+        outs = ''
+        outs = '\n'.join([outs, stdout])
+        lines = outs.splitlines()
+        filtered_lines = (filter(lambda x: master in x, lines))
+        if len(filtered_lines) == 0:
+            msg = message.get('error_need_cluster_meet')
+            self._print(msg)
+            msg = message.get('cluster_meet')
+            self._print(msg)
+            # Cluster meet
+            sub_cmd = 'cluster meet {ip} {port}'.format(ip=m_host, port=m_port)
+            command = '{} {} -h {} -p {} {}'.format(
+                ' '.join(env_cmd),
+                redis_cli_cmd,
+                s_host,
+                s_port,
+                sub_cmd,
+            )
+            stdout = subprocess.check_output(command, shell=True)
+            self._print(stdout)
+            # Get master's uuid
+            sub_cmd = 'cluster nodes'
+            command = '{} {} -h {} -p {} {}'.format(
+                ' '.join(env_cmd),
+                redis_cli_cmd,
+                s_host,
+                s_port,
+                sub_cmd,
+            )
+            stdout = subprocess.check_output(command, shell=True)
+            outs = ''
+            outs = '\n'.join([outs, stdout])
+            lines = outs.splitlines()
+            filtered_lines = (filter(lambda x: master in x, lines))
+            m_uuid = filtered_lines[0].split()[0]
+        else:
+            m_uuid = filtered_lines[0].split()[0]
+
+        if len(m_uuid) == 0:
+            msg = message.get('error_no_uuid')
+            raise ClusterRedisError(msg)
+
+        # Replicate
+        msg = message.get('start_replicate')
+        self._print(msg)
+        sub_cmd = 'cluster replicate {uuid}'.format(uuid=m_uuid)
+        command = '{} {} -h {} -p {} {}'.format(
+            ' '.join(env_cmd),
+            redis_cli_cmd,
+            s_host,
+            s_port,
+            sub_cmd,
+        )
+        stdout = subprocess.check_output(command, shell=True)
+        outs = ''
+        outs = '\n'.join([outs, stdout])
+        self._print(outs)
+
     def forget_noaddr(self):
         """Forget noaddr nodes that is not used anymore in cluster
         """
         center = Center()
         center.update_ip_port()
-        logger.debug('find_noaddr')
+        logger.debug('forget_noaddr')
         ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
         outs = ''
         meta = []
@@ -387,9 +475,13 @@ class Cluster(object):
 
         noslave_masters = []
         for master_node in master_nodes:
-            for slave_node in master_node['slaves']:
-                if slave_node['status'] == 'disconnected':
-                    noslave_masters.append(master_node['addr'])
+            if len(master_node['slaves']) == 0:
+                noslave_masters.append(master_node['addr'])
+            else:
+                for slave_node in master_node['slaves']:
+                    if slave_node['status'] == 'disconnected':
+                        noslave_masters.append(master_node['addr'])
+                        break
 
         noslot_masters = []
         ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
