@@ -720,7 +720,6 @@ class Cluster(object):
         """Query and show cluster row count
         """
         logger.debug('rowcount')
-
         # open-redis-cli-all info Tablespace | grep totalRows | awk -F ',
         # ' '{print $4}' | awk -F '=' '{sum += $2} END {print sum}'
         ret = RedisCliUtil.command_all_async('info Tablespace', slave=False)
