@@ -298,6 +298,106 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def failover_with_dir(self, server, dir):
+        """Find masters that use the specified directory path and do failover with its slave
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('failover_with_dir')
+        master_nodes = center.get_master_obj_list()
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+
+        # Find masters with dir
+        ret = RedisCliUtil.command_all_async('config get dir', slave=True)
+        outs = ''
+        meta = []
+        m_endpoint = []
+        for node in master_nodes:
+            m_endpoint.append(node['addr'])
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                flat_stdout = '\n'.join([outs, stdout])
+                line = flat_stdout.splitlines()
+                if host == server and dir in line[2]:
+                    endpoint = '{}:{}'.format(host, port)
+                    if endpoint in m_endpoint:
+                        meta.append(endpoint)
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        for endpoint in meta:
+            for master_node in master_nodes:
+                if endpoint == master_node['addr']:
+                    for slave_node in master_node['slaves']:
+                        addr = slave_node['addr']
+                        (s_host, s_port) = addr.split(':')
+                        sub_cmd = 'cluster failover takeover'
+                        command = '{} {} -h {} -p {} {}'.format(
+                            ' '.join(env_cmd),
+                            redis_cli_cmd,
+                            s_host,
+                            s_port,
+                            sub_cmd,
+                        )
+                        self._print(message.get('try_failover_takeover').format(slave=addr))
+                        stdout = subprocess.check_output(command, shell=True)
+                        self._print(stdout)
+
+    def masters_with_dir(self, server, dir):
+        """Find masters that use the specified directory path
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('masters_with_dir')
+        master_nodes = center.get_master_obj_list()
+        ret = RedisCliUtil.command_all_async('config get dir', slave=True)
+        outs = ''
+        meta = []
+        m_endpoint = []
+        for node in master_nodes:
+            m_endpoint.append(node['addr'])
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                flat_stdout = '\n'.join([outs, stdout])
+                line = flat_stdout.splitlines()
+                if host == server and dir in line[2]:
+                    endpoint = '{}:{}'.format(host,port)
+                    if endpoint in m_endpoint:
+                        meta.append([host, port, line[2]])
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+        utils.print_table([['HOST', 'PORT', 'PATH']] + meta)
+
+    def nodes_with_dir(self, server, dir):
+        """Find nodes that use the specified directory path
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('nodes_with_dir')
+        ret = RedisCliUtil.command_all_async('config get dir', slave=True)
+        outs = ''
+        meta = []
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                flat_stdout = '\n'.join([outs, stdout])
+                line = flat_stdout.splitlines()
+                if host == server and dir in line[2]:
+                    meta.append([host, port, line[2]])
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+        utils.print_table([['HOST', 'PORT', 'PATH']] + meta)
+
     def reset_distribution(self):
         """ Reset the distribution of masters and slaves with original setting
         """
