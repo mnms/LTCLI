@@ -298,6 +298,51 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def force_failover(self, server):
+        """ Find all masters on the server and convert them to slaves. Finally, in the server, only slaves will be remained.
+        """
+
+        logger.debug('force_failover')
+        center = Center()
+        center.update_ip_port()
+        master_nodes = center.get_master_obj_list()
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+
+        outs = ''
+        meta = []
+        m_endpoint = []
+        for node in master_nodes:
+            addr = node['addr']
+            (host, port) = addr.split(':')
+            if host == server:
+                for slave_node in node['slaves']:
+                    addr = slave_node['addr']
+                    (s_host, s_port) = addr.split(':')
+                    sub_cmd = 'cluster failover takeover'
+                    command = '{} {} -h {} -p {} {}'.format(
+                        ' '.join(env_cmd),
+                        redis_cli_cmd,
+                        s_host,
+                        s_port,
+                        sub_cmd,
+                    )
+                    self._print(message.get('try_failover_takeover').format(slave=addr))
+                    stdout = subprocess.check_output(command, shell=True)
+                    self._print(stdout)
+
+
+
     def failover_with_dir(self, server, dir):
         """Find masters that use the specified directory path and do failover with its slave
         """
