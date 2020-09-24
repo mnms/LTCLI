@@ -294,6 +294,7 @@ def _deploy(cluster_id, history_save, clean):
             return
 
     restore_yes = None
+    no_localhost = False
     current_time = time.strftime("%Y%m%d%H%M%S", time.gmtime())
     cluster_backup_dir = 'cluster_{}_bak_{}'.format(cluster_id, current_time)
     conf_backup_dir = 'cluster_{}_conf_bak_{}'.format(cluster_id, current_time)
@@ -364,9 +365,7 @@ def _deploy(cluster_id, history_save, clean):
     logger.debug('Connection of all hosts ok.')
     success = Center().check_include_localhost(hosts)
     if not success:
-        msg = message.get('error_not_include_localhost')
-        logger.error(msg)
-        return
+        no_localhost = True
 
     # get port info
     if deploy_state == DEPLOYED:
@@ -428,6 +427,12 @@ def _deploy(cluster_id, history_save, clean):
             props_dict['replicas'] = replicas
 
     # if pending, delete legacy on each hosts
+    if no_localhost:
+        if DeployUtil().get_state(cluster_id, local_ip) == PENDING:
+            client = net.get_ssh(local_ip)
+            command = 'rm -rf {}'.format(cluster_path)
+            net.ssh_execute(client=client, command=command)
+            client.close()
     for host in hosts:
         if DeployUtil().get_state(cluster_id, host) == PENDING:
             client = net.get_ssh(host)
@@ -444,6 +449,8 @@ def _deploy(cluster_id, history_save, clean):
         pre_hosts = config.get_props(props_path, 'sr2_redis_master_hosts')
         added_hosts -= set(pre_hosts)
     can_deploy = True
+    if no_localhost:
+        added_hosts |= set([local_ip])
     for host in added_hosts:
         client = net.get_ssh(host)
         if net.is_exist(client, cluster_path):
@@ -492,7 +499,8 @@ def _deploy(cluster_id, history_save, clean):
     # transfer & install
     msg = message.get('transfer_and_execute_installer')
     logger.info(msg)
-    for host in hosts:
+    target_hosts = hosts + [local_ip] if no_localhost else hosts
+    for host in target_hosts:
         logger.info(' - {}'.format(host))
         client = net.get_ssh(host)
         cmd = 'mkdir -p {0} && touch {0}/.deploy.state'.format(cluster_path)
@@ -578,7 +586,7 @@ def _deploy(cluster_id, history_save, clean):
     # set deploy state complete
     if os.path.exists(tmp_backup_path):
         shutil.rmtree(tmp_backup_path)
-    for node in hosts:
+    for node in target_hosts:
         path_of_fb = config.get_path_of_fb(cluster_id)
         cluster_path = path_of_fb['cluster_path']
         client = net.get_ssh(node)
