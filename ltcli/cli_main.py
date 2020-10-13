@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import os
+import re
 import time
 import shutil
 import socket
@@ -601,6 +602,31 @@ def _deploy(cluster_id, history_save, clean):
     logger.info(msg)
 
 
+def run_sync(host=None):
+    """Import clusters from the host
+    """
+    if host is None:
+        logger.error('host information is not available')
+        return None
+    cluster_base = config.get_base_directory()
+    if not os.path.exists(cluster_base):
+        logger.error('cluster does not exist on the localhost.')
+        os.mkdir(cluster_base)
+    cluster_set = set(filter(lambda x : re.match(r'cluster_[\d]+', x), os.listdir(cluster_base)))
+    client = net.get_ssh(host)
+    if not net.is_dir(client, cluster_base):
+        logger.error('cluster does not exist on the host({}).'.format(host))
+        return None
+    target_cluster_set = set(filter(lambda x : re.match(r'cluster_[\d]+', x), 
+        net.ssh_execute(client, 'ls {}'.format(cluster_base))[1].split()))
+    conflict_cluster = cluster_set & target_cluster_set
+    logger.info("Cluster conflict: {}".format([x.encode('ascii', 'ignore') for x in conflict_cluster]))
+    import_target = (cluster_set ^ target_cluster_set) & target_cluster_set
+    for target in import_target:
+        os.system("rsync -a {} {}".format(host + ":" + cluster_base + "/" + target, 
+            cluster_base))
+    logger.info("Importing cluster complete...")
+
 def run_cluster_use(cluster_id):
     """Alias of command cluster use.
     """
@@ -647,6 +673,7 @@ for automatically generating CLIs
         # pylint: disable=invalid-name
         # cli command naming is not have to follow snake_caes
         self.deploy = run_deploy
+        self.sync = run_sync
         self.c = run_cluster_use
         self.cluster = Cluster()
         self.cli = Cli()
