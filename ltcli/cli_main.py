@@ -454,6 +454,13 @@ def _deploy(cluster_id, history_save, clean):
         added_hosts |= set([local_ip])
     for host in added_hosts:
         client = net.get_ssh(host)
+        is_localhost = Center().is_localhost(host)
+        if is_localhost:
+            if no_localhost:
+                continue
+            if os.path.exists(cluster_path + '/remote'):
+                meta.append([host, color.green('CLEAN')])
+                continue
         if net.is_exist(client, cluster_path):
             meta.append([host, color.red('CLUSTER EXIST')])
             can_deploy = False
@@ -502,7 +509,8 @@ def _deploy(cluster_id, history_save, clean):
     logger.info(msg)
     target_hosts = hosts + [local_ip] if no_localhost else hosts
     for host in target_hosts:
-        logger.info(' - {}'.format(host))
+        if not (no_localhost and Center().is_localhost(host)):
+            logger.info(' - {}'.format(host))
         client = net.get_ssh(host)
         cmd = 'mkdir -p {0} && touch {0}/.deploy.state'.format(cluster_path)
         net.ssh_execute(client=client, command=cmd)
@@ -594,6 +602,8 @@ def _deploy(cluster_id, history_save, clean):
         cmd = 'rm -rf {}'.format(os.path.join(cluster_path, '.deploy.state'))
         net.ssh_execute(client=client, command=cmd)
         client.close()
+    if no_localhost:
+        os.system('touch {}/remote'.format(cluster_path))
 
     msg = message.get('complete_deploy').format(cluster_id=cluster_id)
     logger.info(msg)
