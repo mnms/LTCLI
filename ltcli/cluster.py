@@ -8,6 +8,7 @@ from ltcli.center import Center
 from ltcli.log import logger
 from ltcli.rediscli_util import RedisCliUtil
 from ltcli.redistrib2.custom_trib import rebalance_cluster_cmd
+from ltcli.redistrib2.custom_trib import check_cluster_cmd
 from ltcli.exceptions import (
     ClusterIdError,
     ClusterNotExistError,
@@ -789,6 +790,14 @@ class Cluster(object):
         :param port: rebalance target port
         """
         rebalance_cluster_cmd(ip, port)
+
+    def check(self, ip, port):
+        """Check that all slots are allocated to the surviving node
+
+        :param ip: target ip
+        :param port: target port
+        """
+        check_cluster_cmd(ip,port)
 
     def add_slave(self, yes=False):
         """Add slave of cluster
