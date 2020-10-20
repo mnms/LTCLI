@@ -627,13 +627,18 @@ def run_sync(host=None):
     if not net.is_dir(client, cluster_base):
         logger.error('cluster does not exist on the host({}).'.format(host))
         return None
-    target_cluster_set = set(filter(lambda x : re.match(r'cluster_[\d]+', x), 
+    target_cluster_set = set(filter(lambda x : re.match(r'cluster_[\d]+', x),
         net.ssh_execute(client, 'ls {}'.format(cluster_base))[1].split()))
     conflict_cluster = cluster_set & target_cluster_set
-    logger.info("Cluster conflict: {}".format([x.encode('ascii', 'ignore') for x in conflict_cluster]))
     import_target = (cluster_set ^ target_cluster_set) & target_cluster_set
+    for cluster in conflict_cluster:
+        msg = message.get('ask_cluster_overwrite').format(cluster=" ".join(cluster.split('_')))
+        overwrite = ask_util.askBool(msg, default='n')
+        if overwrite:
+            import_target.add(cluster)
+            os.system("rm -rf {}".format(cluster_base + "/" + cluster))
     for target in import_target:
-        os.system("rsync -a {} {}".format(host + ":" + cluster_base + "/" + target, 
+        os.system("rsync -a {} {}".format(host + ":" + cluster_base + "/" + target,
             cluster_base))
     logger.info("Importing cluster complete...")
 
