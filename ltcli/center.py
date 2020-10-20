@@ -647,16 +647,23 @@ class Center(object):
         logger.info('OK')
         return True
 
+
+    def is_localhost(self, host):
+        try:
+            ip_addr = socket.gethostbyname(host)
+            if ip_addr in [config.get_local_ip(), '127.0.0.1']:
+                return True
+        except socket.gaierror:
+            raise HostNameError(host)
+        return False
+
     def check_include_localhost(self, hosts):
         logger.debug('check_include_localhost')
+        localhost_included = False
         for host in hosts:
-            try:
-                ip_addr = socket.gethostbyname(host)
-                if ip_addr in [config.get_local_ip(), '127.0.0.1']:
-                    return True
-            except socket.gaierror:
-                raise HostNameError(host)
-        return False
+            if self.is_localhost(host):
+                localhost_included = True
+        return localhost_included
 
     def remove_all_of_redis_log_force(self):
         logger.debug('remove_all_of_redis_log_force')

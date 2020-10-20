@@ -651,6 +651,8 @@ class Cluster(object):
         path_of_fb = config.get_path_of_fb(cluster_id)
         props_path = path_of_fb['redis_properties']
         hosts = config.get_props(props_path, 'sr2_redis_master_hosts', [])
+        if not center.check_include_localhost(hosts):
+            hosts += [config.get_local_ip()]
         tag = time.strftime("%Y%m%d%H%M%S", time.gmtime())
         cluster_backup_dir = 'cluster_{}_bak_{}'.format(cluster_id, tag)
         for host in hosts:

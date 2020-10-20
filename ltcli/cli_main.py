@@ -2,6 +2,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 
 import os
+import re
 import time
 import shutil
 import socket
@@ -294,6 +295,7 @@ def _deploy(cluster_id, history_save, clean):
             return
 
     restore_yes = None
+    no_localhost = False
     current_time = time.strftime("%Y%m%d%H%M%S", time.gmtime())
     cluster_backup_dir = 'cluster_{}_bak_{}'.format(cluster_id, current_time)
     conf_backup_dir = 'cluster_{}_conf_bak_{}'.format(cluster_id, current_time)
@@ -364,9 +366,7 @@ def _deploy(cluster_id, history_save, clean):
     logger.debug('Connection of all hosts ok.')
     success = Center().check_include_localhost(hosts)
     if not success:
-        msg = message.get('error_not_include_localhost')
-        logger.error(msg)
-        return
+        no_localhost = True
 
     # get port info
     if deploy_state == DEPLOYED:
@@ -428,6 +428,12 @@ def _deploy(cluster_id, history_save, clean):
             props_dict['replicas'] = replicas
 
     # if pending, delete legacy on each hosts
+    if no_localhost:
+        if DeployUtil().get_state(cluster_id, local_ip) == PENDING:
+            client = net.get_ssh(local_ip)
+            command = 'rm -rf {}'.format(cluster_path)
+            net.ssh_execute(client=client, command=command)
+            client.close()
     for host in hosts:
         if DeployUtil().get_state(cluster_id, host) == PENDING:
             client = net.get_ssh(host)
@@ -444,8 +450,17 @@ def _deploy(cluster_id, history_save, clean):
         pre_hosts = config.get_props(props_path, 'sr2_redis_master_hosts')
         added_hosts -= set(pre_hosts)
     can_deploy = True
+    if no_localhost:
+        added_hosts |= set([local_ip])
     for host in added_hosts:
         client = net.get_ssh(host)
+        is_localhost = Center().is_localhost(host)
+        if is_localhost:
+            if no_localhost:
+                continue
+            if os.path.exists(cluster_path + '/remote'):
+                meta.append([host, color.green('CLEAN')])
+                continue
         if net.is_exist(client, cluster_path):
             meta.append([host, color.red('CLUSTER EXIST')])
             can_deploy = False
@@ -492,8 +507,10 @@ def _deploy(cluster_id, history_save, clean):
     # transfer & install
     msg = message.get('transfer_and_execute_installer')
     logger.info(msg)
-    for host in hosts:
-        logger.info(' - {}'.format(host))
+    target_hosts = hosts + [local_ip] if no_localhost else hosts
+    for host in target_hosts:
+        if not (no_localhost and Center().is_localhost(host)):
+            logger.info(' - {}'.format(host))
         client = net.get_ssh(host)
         cmd = 'mkdir -p {0} && touch {0}/.deploy.state'.format(cluster_path)
         net.ssh_execute(client=client, command=cmd)
@@ -578,13 +595,15 @@ def _deploy(cluster_id, history_save, clean):
     # set deploy state complete
     if os.path.exists(tmp_backup_path):
         shutil.rmtree(tmp_backup_path)
-    for node in hosts:
+    for node in target_hosts:
         path_of_fb = config.get_path_of_fb(cluster_id)
         cluster_path = path_of_fb['cluster_path']
         client = net.get_ssh(node)
         cmd = 'rm -rf {}'.format(os.path.join(cluster_path, '.deploy.state'))
         net.ssh_execute(client=client, command=cmd)
         client.close()
+    if no_localhost:
+        os.system('touch {}/remote'.format(cluster_path))
 
     msg = message.get('complete_deploy').format(cluster_id=cluster_id)
     logger.info(msg)
@@ -592,6 +611,36 @@ def _deploy(cluster_id, history_save, clean):
     msg = message.get('suggest_after_deploy')
     logger.info(msg)
 
+
+def run_sync(host=None):
+    """Import clusters from the host
+    """
+    if host is None:
+        logger.error('host information is not available')
+        return None
+    cluster_base = config.get_base_directory()
+    if not os.path.exists(cluster_base):
+        logger.error('cluster does not exist on the localhost.')
+        os.mkdir(cluster_base)
+    cluster_set = set(filter(lambda x : re.match(r'cluster_[\d]+', x), os.listdir(cluster_base)))
+    client = net.get_ssh(host)
+    if not net.is_dir(client, cluster_base):
+        logger.error('cluster does not exist on the host({}).'.format(host))
+        return None
+    target_cluster_set = set(filter(lambda x : re.match(r'cluster_[\d]+', x),
+        net.ssh_execute(client, 'ls {}'.format(cluster_base))[1].split()))
+    conflict_cluster = cluster_set & target_cluster_set
+    import_target = (cluster_set ^ target_cluster_set) & target_cluster_set
+    for cluster in conflict_cluster:
+        msg = message.get('ask_cluster_overwrite').format(cluster=" ".join(cluster.split('_')))
+        overwrite = ask_util.askBool(msg, default='n')
+        if overwrite:
+            import_target.add(cluster)
+            os.system("rm -rf {}".format(cluster_base + "/" + cluster))
+    for target in import_target:
+        os.system("rsync -a {} {}".format(host + ":" + cluster_base + "/" + target,
+            cluster_base))
+    logger.info("Importing cluster complete...")
 
 def run_cluster_use(cluster_id):
     """Alias of command cluster use.
@@ -639,6 +688,7 @@ for automatically generating CLIs
         # pylint: disable=invalid-name
         # cli command naming is not have to follow snake_caes
         self.deploy = run_deploy
+        self.sync = run_sync
         self.c = run_cluster_use
         self.cluster = Cluster()
         self.cli = Cli()
