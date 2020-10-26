@@ -1,4 +1,5 @@
 import os
+import socket
 from functools import reduce
 import subprocess
 import time
@@ -733,9 +734,10 @@ class Cluster(object):
         meta = []
         total_masters = 0
         total_slaves = 0
-        for node in center.master_host_list:
+        for nd in center.master_host_list:
             num_of_masters = 0
             num_of_slaves = 0
+            node = socket.gethostbyname(nd)
 
             host_lines = (filter(lambda x: node in x, filtered_lines))
             for node in host_lines:
