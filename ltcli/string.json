@@ -64,6 +64,7 @@
     "check_port": "Check port...",
     "ask_port_collision": "(Watch out) The above ports are already in use. Do you want to proceed?",
     "check_cluster_exist": "Checking cluster exist...",
+    "ask_cluster_overwrite":"Localhost already has the information on the {cluster}. Do you want to overwrite?",
     "error_cluster_collision": "Cluster information exist on some hosts.",
     "sync_conf": "Sync conf...",
     "error_sync_conf": "Fail to sync conf.",
