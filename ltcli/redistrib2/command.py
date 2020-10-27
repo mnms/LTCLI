@@ -172,7 +172,7 @@ def _migr_slots(source_node, target_node, slots, nodes):
     key_count = 0
     for slot in slots:
         key_count += _migr_one_slot(source_node, target_node, slot, nodes)
-    logging.info('Migrated: %d slots %d keys from %s<%s:%d> to %s<%s:%d>',
+    logging.info('Migrated: %d slots %d keys from %s<%s:%d> to %s<%s:%d>\n',
                  len(slots), key_count, source_node.node_id, source_node.host,
                  source_node.port, target_node.node_id, target_node.host,
                  target_node.port)
