@@ -168,13 +168,15 @@ def _migr_slots(source_node, target_node, slots, nodes):
     logging.info('Migrating %d slots from %s<%s:%d> to %s<%s:%d>', len(slots),
                  source_node.node_id, source_node.host, source_node.port,
                  target_node.node_id, target_node.host, target_node.port)
+    logging.info('\n')
     key_count = 0
     for slot in slots:
         key_count += _migr_one_slot(source_node, target_node, slot, nodes)
-    logging.info('Migrated: %d slots %d keys from %s<%s:%d> to %s<%s:%d>',
+    logging.info('Migrated: %d slots %d keys from %s<%s:%d> to %s<%s:%d>\n',
                  len(slots), key_count, source_node.node_id, source_node.host,
                  source_node.port, target_node.node_id, target_node.host,
                  target_node.port)
+    logging.info('\n')
 
 
 def _migr_one_slot(source_node, target_node, slot, nodes):
@@ -188,37 +190,44 @@ def _migr_one_slot(source_node, target_node, slot, nodes):
             ]))
 
     @retry(stop_max_attempt_number=16, wait_fixed=100)
-    def setslot_stable(conn, slot, node_id):
+    def setslot_node(conn, slot, node_id):
         m = conn.execute('cluster', 'setslot', slot, 'node', node_id)
         expect_exec_ok(m, conn, slot)
 
+    @retry(stop_max_attempt_number=16, wait_fixed=100)
+    def setslot_move(conn, slot, node_id):
+        m = conn.execute('cluster', 'setslot', slot, 'move', node_id)
+        expect_exec_ok(m, conn, slot)
     source_conn = source_node.get_conn()
     target_conn = target_node.get_conn()
 
-    try:
-        expect_exec_ok(
-            target_conn.execute('cluster', 'setslot', slot, 'importing',
-                                source_node.node_id), target_conn, slot)
-    except hiredis.ReplyError as e:
-        if 'already the owner of' not in str(e):
-            target_conn.raise_(str(e))
+    # try:
+    #     expect_exec_ok(
+    #         target_conn.execute('cluster', 'setslot', slot, 'importing',
+    #                             source_node.node_id), target_conn, slot)
+    # except hiredis.ReplyError as e:
+    #     if 'already the owner of' not in str(e):
+    #         target_conn.raise_(str(e))
+    #
+    # try:
+    #     expect_exec_ok(
+    #         source_conn.execute('cluster', 'setslot', slot, 'migrating',
+    #                             target_node.node_id), source_conn, slot)
+    # except hiredis.ReplyError as e:
+    #     if 'not the owner of' not in str(e):
+    #         source_conn.raise_(str(e))
 
-    try:
-        expect_exec_ok(
-            source_conn.execute('cluster', 'setslot', slot, 'migrating',
-                                target_node.node_id), source_conn, slot)
-    except hiredis.ReplyError as e:
-        if 'not the owner of' not in str(e):
-            source_conn.raise_(str(e))
+    # to-do
+    #keys = _migr_keys(source_conn, target_node.host, target_node.port, slot)
 
-    keys = _migr_keys(source_conn, target_node.host, target_node.port, slot)
-    setslot_stable(source_conn, slot, target_node.node_id)
+    # setslot_node(source_conn, slot, target_node.node_id)
     for node in nodes:
         if node.master:
-            setslot_stable(node.get_conn(), slot, target_node.node_id)
+            setslot_move(node.get_conn(), slot, target_node.node_id)
     sys.stdout.write('#')
     sys.stdout.flush()
-    return keys
+    return 0
+    # return keys
 
 
 @retry(stop_max_attempt_number=8, wait_fixed=500)
@@ -401,6 +410,29 @@ def _check_slave(slave_host, slave_port, t):
                 return
             t.raise_('%s not switched to a slave' % slave_addr)
 
+def meet_new_nodes(curr_host, curr_port, new_host, new_port):
+    with Connection(new_host, new_port) as t, \
+            Connection(curr_host, curr_port) as curr_conn:
+        _ensure_cluster_status_set(curr_conn)
+        _meet(curr_conn, t)
+        _poll_check_status(t)
+        logging.info('Instance at %s:%d has joined %s:%d; now set replica',
+                     new_host, new_port, curr_host, curr_port)
+
+def replicate_scaleout_nodes(master_host, master_port, slave_host, slave_port):
+    with Connection(slave_host, slave_port) as t, \
+            Connection(master_host, master_port) as master_conn:
+        _ensure_cluster_status_set(master_conn)
+        _ensure_cluster_status_set(t)
+        myself = _list_nodes(master_conn)[1]
+        myid = myself.node_id if myself.master else myself.master_id
+
+        _replicate(t, myid)
+        _check_slave(slave_host, slave_port, master_conn)
+
+        _poll_check_status(master_conn)
+        logging.info('Instance at %s:%d set as replica to %s', slave_host,
+                     slave_port, myid)
 
 def replicate(master_host, master_port, slave_host, slave_port):
     with Connection(slave_host, slave_port) as t, \
