@@ -71,7 +71,7 @@ class RedisTrib(object):
             if threshold > 0:
                 if slot_count > 0:
                     err_perc = abs(100 - (100.0 * expected / slot_count))
-                    print('err_perc:', err_perc)
+                    print('err_perc: %f' % err_perc)
                     over_threshold = err_perc > threshold
                 elif expected > 0:
                     over_threshold = True
@@ -278,7 +278,6 @@ class RedisTrib(object):
             if node_id == node.info['name']:
                 return True
         return False
-
 
 def rebalance_cluster_cmd(ip, port):
     logging.debug('rebalance')
