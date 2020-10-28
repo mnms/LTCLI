@@ -4,7 +4,7 @@ from functools import reduce
 import subprocess
 import time
 
-from ltcli import color, config, cluster_util, net, utils, message, ask_util
+from ltcli import color, config, cluster_util, net, utils, message
 from ltcli.center import Center
 from ltcli.log import logger
 from ltcli.rediscli_util import RedisCliUtil
@@ -784,103 +784,6 @@ class Cluster(object):
         # row_count = reduce(lambda x, y: {key: int(x[key]) + int(y[key])}, ld)
         row_count = reduce(lambda x, y: x + int(y[key]), ld, 0)
         self._print(row_count)
-
-    def scaleout(self):
-        """ Scale out the cluster
-
-        """
-        # settings
-
-
-        curr_cluster_id = config.get_cur_cluster_id()
-        scaleout_hosts = ask_util.hosts_to_scaleout()
-
-        scaleout_size = len(scaleout_hosts)
-        if scaleout_size == 0:
-            msg = message.get('empty_nodes_to_scaleout')
-            raise ClusterRedisError(msg)
-
-        path_of_fb = config.get_path_of_fb(curr_cluster_id)
-        props_path = path_of_fb['redis_properties']
-        m_key = 'sr2_redis_master_hosts'
-        m_hosts = config.get_props(props_path, m_key, [])
-        s_key = 'sr2_redis_slave_hosts'
-        s_hosts = config.get_props(props_path, s_key, [])
-
-        prev_hosts = m_hosts
-        already_included = False
-        for node in scaleout_hosts:
-            if node in m_hosts:
-                already_included = True
-                break
-
-        if already_included == False:
-            m_hosts = m_hosts + scaleout_hosts
-            config.make_key_enable(props_path, m_key)
-            config.set_props(props_path, m_key, m_hosts)
-
-            s_hosts = s_hosts + scaleout_hosts
-            config.make_key_enable(props_path, s_key)
-            config.set_props(props_path, s_key, s_hosts)
-
-        center = Center()
-        center.update_ip_port()
-        success = center.check_hosts_connection()
-        if not success:
-            return
-
-        m_ports = center.master_port_list
-        s_ports = center.slave_port_list
-
-        center.ensure_cluster_exist()
-
-        # confirm info
-        result = center.confirm_node_port_info()
-        if not result:
-            msg = message.get('cancel')
-            logger.warning(msg)
-            return
-
-        # backup logs
-        center.backup_server_logs()
-        center.create_redis_data_directory()
-
-        # configure
-        center.configure_redis()
-        center.sync_conf()
-
-        # run added nodes(master/slave)
-        center.start_redis_process()
-        center.wait_until_all_redis_process_up()
-
-        # cluster meet master nodes. 'cluster meet' for slaves is handled in replicate.
-        center.meet_new_nodes(scaleout_hosts)
-
-        # do replicate
-        # change redis config temporarily
-        key = 'cluster-node-timeout'
-        origin_s_value = center.cli_config_get(key, s_hosts[0], s_ports[0])
-        if not origin_s_value:
-            msg = "RedisConfigKeyError: '{}'".format(key)
-            logger.warning(msg)
-        if origin_s_value:
-            # cli config set cluster-node-timeout 2000
-            logger.debug('set cluster node time out 2000 for create')
-            center.cli_config_set_all(key, '2000', s_hosts, s_ports)
-
-
-        center.replicate_with_scaleout_nodes(prev_hosts, scaleout_hosts)
-
-        if origin_s_value:
-            # cli config restore cluster-node-timeout
-            logger.debug('restore cluster node time out')
-            center.cli_config_set_all(key, origin_s_value, s_hosts, s_ports)
-
-        # scale out
-        self.rebalance(m_hosts[0], m_ports[0])
-        # check_cluster_cmd(m_hosts[0], m_ports[0])
-
-        self._print("OK")
 
     def rebalance(self, ip, port):
         """Rebalance cluster
