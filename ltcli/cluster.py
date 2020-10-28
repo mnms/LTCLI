@@ -323,8 +323,6 @@ class Cluster(object):
 
         """
         # settings
-
-
         curr_cluster_id = config.get_cur_cluster_id()
         scaleout_hosts = ask_util.hosts_to_scaleout()
 
@@ -389,7 +387,6 @@ class Cluster(object):
         # cluster meet master nodes. 'cluster meet' for slaves is handled in replicate.
         center.meet_new_nodes(scaleout_hosts)
 
-        # do replicate
         # change redis config temporarily
         key = 'cluster-node-timeout'
         origin_s_value = center.cli_config_get(key, s_hosts[0], s_ports[0])
@@ -401,9 +398,10 @@ class Cluster(object):
             logger.debug('set cluster node time out 2000 for create')
             center.cli_config_set_all(key, '2000', s_hosts, s_ports)
 
-
+        # do replicate
         center.replicate_with_scaleout_nodes(prev_hosts, scaleout_hosts)
 
+        # rollback redis config
         if origin_s_value:
             # cli config restore cluster-node-timeout
             logger.debug('restore cluster node time out')
@@ -411,7 +409,6 @@ class Cluster(object):
 
         # scale out
         self.rebalance(m_hosts[0], m_ports[0])
-        # check_cluster_cmd(m_hosts[0], m_ports[0])
 
         self._print("OK")
 

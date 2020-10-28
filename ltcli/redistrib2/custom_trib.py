@@ -110,6 +110,7 @@ class RedisTrib(object):
                 print('Moving %s slots from %s to %s' % (
                     num_slots, src_name, dst_name))
                 self.move_slots(src, dst, num_slots)
+                print('\n')
 
             dst.info['balance'] += num_slots
             src.info['balance'] -= num_slots

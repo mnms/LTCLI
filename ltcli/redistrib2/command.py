@@ -168,7 +168,6 @@ def _migr_slots(source_node, target_node, slots, nodes):
     logging.info('Migrating %d slots from %s<%s:%d> to %s<%s:%d>', len(slots),
                  source_node.node_id, source_node.host, source_node.port,
                  target_node.node_id, target_node.host, target_node.port)
-    logging.info('\n')
     key_count = 0
     for slot in slots:
         key_count += _migr_one_slot(source_node, target_node, slot, nodes)
@@ -176,7 +175,6 @@ def _migr_slots(source_node, target_node, slots, nodes):
                  len(slots), key_count, source_node.node_id, source_node.host,
                  source_node.port, target_node.node_id, target_node.host,
                  target_node.port)
-    logging.info('\n')
 
 
 def _migr_one_slot(source_node, target_node, slot, nodes):
@@ -199,36 +197,14 @@ def _migr_one_slot(source_node, target_node, slot, nodes):
         m = conn.execute('cluster', 'setslot', slot, 'move', node_id)
         expect_exec_ok(m, conn, slot)
     source_conn = source_node.get_conn()
-    target_conn = target_node.get_conn()
 
-    # try:
-    #     expect_exec_ok(
-    #         target_conn.execute('cluster', 'setslot', slot, 'importing',
-    #                             source_node.node_id), target_conn, slot)
-    # except hiredis.ReplyError as e:
-    #     if 'already the owner of' not in str(e):
-    #         target_conn.raise_(str(e))
-    #
-    # try:
-    #     expect_exec_ok(
-    #         source_conn.execute('cluster', 'setslot', slot, 'migrating',
-    #                             target_node.node_id), source_conn, slot)
-    # except hiredis.ReplyError as e:
-    #     if 'not the owner of' not in str(e):
-    #         source_conn.raise_(str(e))
-
-    # to-do
-    #keys = _migr_keys(source_conn, target_node.host, target_node.port, slot)
-
-    # setslot_node(source_conn, slot, target_node.node_id)
+    setslot_move(source_conn, slot, target_node.node_id)
     for node in nodes:
         if node.master:
             setslot_move(node.get_conn(), slot, target_node.node_id)
     sys.stdout.write('#')
     sys.stdout.flush()
     return 0
-    # return keys
-
 
 @retry(stop_max_attempt_number=8, wait_fixed=500)
 def _meet(clst, new):
