@@ -1,5 +1,7 @@
 import os
+import socket
 from functools import reduce
+import subprocess
 import time
 
 from ltcli import color, config, cluster_util, net, utils, message
@@ -7,6 +9,7 @@ from ltcli.center import Center
 from ltcli.log import logger
 from ltcli.rediscli_util import RedisCliUtil
 from ltcli.redistrib2.custom_trib import rebalance_cluster_cmd
+from ltcli.redistrib2.custom_trib import check_cluster_cmd
 from ltcli.exceptions import (
     ClusterIdError,
     ClusterNotExistError,
@@ -226,6 +229,20 @@ class Cluster(object):
         """
         logger.info(cluster_util.get_cluster_list())
 
+    def compare_ip(self, host1, host2):
+        """Compare the IPs of 2 severs and check if they're matched.
+
+        :param host1: IP or hostname
+        :param host2: IP or hostname
+        """
+        ip1 = socket.gethostbyname(host1)
+        ip2 = socket.gethostbyname(host2)
+
+        if ip1 == ip2:
+            return True
+        else:
+            return False
+
     def restart(
         self,
         force_stop=False,
@@ -297,6 +314,489 @@ class Cluster(object):
         center.configure_redis()
         center.sync_conf(show_result=True)
 
+    def force_failover(self, server):
+        """ Find all masters on the server and convert them to slaves. Finally, in the server, only slaves will be remained.
+
+        :param server: IP or hostname
+        """
+
+        logger.debug('force_failover')
+        center = Center()
+        center.update_ip_port()
+        master_nodes = center.get_master_obj_list()
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+
+        outs = ''
+        meta = []
+        m_endpoint = []
+        for node in master_nodes:
+            addr = node['addr']
+            (host, port) = addr.split(':')
+            # if host == server:
+            if self.compare_ip(host, server):
+                for slave_node in node['slaves']:
+                    addr = slave_node['addr']
+                    (s_host, s_port) = addr.split(':')
+                    sub_cmd = 'cluster failover takeover'
+                    command = '{} {} -h {} -p {} {}'.format(
+                        ' '.join(env_cmd),
+                        redis_cli_cmd,
+                        s_host,
+                        s_port,
+                        sub_cmd,
+                    )
+                    self._print(message.get('try_failover_takeover').format(slave=addr))
+                    stdout = subprocess.check_output(command, shell=True)
+                    self._print(stdout)
+
+
+
+    def failover_with_dir(self, server, dir):
+        """Find masters that use the specified directory path and do failover with its slave
+
+        :param server: IP or hostname
+        :param dir: directory path
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('failover_with_dir')
+        master_nodes = center.get_master_obj_list()
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+
+        # Find masters with dir
+        ret = RedisCliUtil.command_all_async('config get dir', slave=True)
+        outs = ''
+        meta = []
+        m_endpoint = []
+        for node in master_nodes:
+            m_endpoint.append(node['addr'])
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                flat_stdout = '\n'.join([outs, stdout])
+                line = flat_stdout.splitlines()
+                if self.compare_ip(host, server) and dir in line[2]:
+                    endpoint = '{}:{}'.format(socket.gethostbyname(host), port)
+                    if endpoint in m_endpoint:
+                        meta.append(endpoint)
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        for endpoint in meta:
+            for master_node in master_nodes:
+                if endpoint == master_node['addr']:
+                    for slave_node in master_node['slaves']:
+                        addr = slave_node['addr']
+                        (s_host, s_port) = addr.split(':')
+                        sub_cmd = 'cluster failover takeover'
+                        command = '{} {} -h {} -p {} {}'.format(
+                            ' '.join(env_cmd),
+                            redis_cli_cmd,
+                            s_host,
+                            s_port,
+                            sub_cmd,
+                        )
+                        self._print(message.get('try_failover_takeover').format(slave=addr))
+                        stdout = subprocess.check_output(command, shell=True)
+                        self._print(stdout)
+
+    def masters_with_dir(self, server, dir):
+        """Find masters that use the specified directory path
+
+        :param server: IP or hostname
+        :param dir: directory path
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('masters_with_dir')
+        master_nodes = center.get_master_obj_list()
+        ret = RedisCliUtil.command_all_async('config get dir', slave=True)
+        outs = ''
+        meta = []
+        m_endpoint = []
+        for node in master_nodes:
+            m_endpoint.append(node['addr'])
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                flat_stdout = '\n'.join([outs, stdout])
+                line = flat_stdout.splitlines()
+                if self.compare_ip(host, server) and dir in line[2]:
+                    endpoint = '{}:{}'.format(socket.gethostbyname(host),port)
+                    if endpoint in m_endpoint:
+                        meta.append([host, port, line[2]])
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+        utils.print_table([['HOST', 'PORT', 'PATH']] + meta)
+
+    def nodes_with_dir(self, server, dir):
+        """Find nodes that use the specified directory path
+
+        :param server: IP or hostname
+        :param dir: directory path
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('nodes_with_dir')
+        ret = RedisCliUtil.command_all_async('config get dir', slave=True)
+        outs = ''
+        meta = []
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                flat_stdout = '\n'.join([outs, stdout])
+                line = flat_stdout.splitlines()
+                if self.compare_ip(host, server) and dir in line[2]:
+                    meta.append([host, port, line[2]])
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+        utils.print_table([['HOST', 'PORT', 'PATH']] + meta)
+
+    def reset_distribution(self):
+        """ Reset the distribution of masters and slaves with original setting
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('reset_distribution')
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+        slave_nodes = center.get_slave_nodes()
+        master_ports = center.master_port_list
+
+        for slave_node in slave_nodes:
+            (host, port) = slave_node.split(':')
+            try:
+                value = int(port)
+                if value in master_ports:
+                    # failover takeover
+                    msg = message.get('try_failover_takeover').format(slave=slave_node)
+                    self._print(msg)
+                    sub_cmd = 'cluster failover takeover'
+                    command = '{} {} -h {} -p {} {}'.format(
+                        ' '.join(env_cmd),
+                        redis_cli_cmd,
+                        host,
+                        port,
+                        sub_cmd,
+                    )
+                    stdout = subprocess.check_output(command, shell=True)
+                    outs = ''
+                    outs = '\n'.join([outs, stdout])
+                    self._print(outs)
+            except ValueError:
+                pass
+
+    def do_replicate(self, slave, master):
+        """ Replicate a slave node to a master node.
+            Use like 'cluster replicate {slave's ip}:{slave's port} {master's ip}:{master's port}
+
+        :param slave: {slave's ip or hostname}:{slave's port}
+        :param master: {master's ip or hostname}:{master's port}
+        """
+        logger.debug('do_replicate')
+        # Get master's uuid
+        s_hostname, s_port = slave.split(':')
+        m_hostname, m_port = master.split(':')
+        s_host = socket.gethostbyname(s_hostname)
+        m_host = socket.gethostbyname(m_hostname)
+        cluster_id = config.get_cur_cluster_id()
+        lib_path = config.get_ld_library_path(cluster_id)
+        path_of_fb = config.get_path_of_fb(cluster_id)
+        sr2_redis_bin = path_of_fb['sr2_redis_bin']
+        env_cmd = [
+            'GLOBIGNORE=*;',
+            'export LD_LIBRARY_PATH={};'.format(lib_path['ld_library_path']),
+            'export DYLD_LIBRARY_PATH={};'.format(
+                lib_path['dyld_library_path']
+            ),
+        ]
+        redis_cli_cmd = os.path.join(sr2_redis_bin, 'redis-cli')
+        sub_cmd = 'cluster nodes'
+        command = '{} {} -h {} -p {} {}'.format(
+            ' '.join(env_cmd),
+            redis_cli_cmd,
+            s_host,
+            s_port,
+            sub_cmd,
+        )
+        stdout = subprocess.check_output(command, shell=True)
+        outs = ''
+        outs = '\n'.join([outs, stdout])
+        lines = outs.splitlines()
+        m_ip_port = m_host + str(':') + m_port
+        filtered_lines = (filter(lambda x: m_ip_port in x, lines))
+        if len(filtered_lines) == 0:
+            msg = message.get('error_need_cluster_meet')
+            self._print(msg)
+            msg = message.get('cluster_meet')
+            self._print(msg)
+            # Cluster meet
+            sub_cmd = 'cluster meet {ip} {port}'.format(ip=m_host, port=m_port)
+            command = '{} {} -h {} -p {} {}'.format(
+                ' '.join(env_cmd),
+                redis_cli_cmd,
+                s_host,
+                s_port,
+                sub_cmd,
+            )
+            stdout = subprocess.check_output(command, shell=True)
+            self._print(stdout)
+            # Get master's uuid
+            sub_cmd = 'cluster nodes'
+            command = '{} {} -h {} -p {} {}'.format(
+                ' '.join(env_cmd),
+                redis_cli_cmd,
+                s_host,
+                s_port,
+                sub_cmd,
+            )
+            stdout = subprocess.check_output(command, shell=True)
+            outs = ''
+            outs = '\n'.join([outs, stdout])
+            lines = outs.splitlines()
+            filtered_lines = (filter(lambda x: m_ip_port in x, lines))
+            m_uuid = filtered_lines[0].split()[0]
+        else:
+            m_uuid = filtered_lines[0].split()[0]
+
+        if len(m_uuid) == 0:
+            msg = message.get('error_no_uuid')
+            raise ClusterRedisError(msg)
+
+        # Replicate
+        msg = message.get('start_replicate')
+        self._print(msg)
+        sub_cmd = 'cluster replicate {uuid}'.format(uuid=m_uuid)
+        command = '{} {} -h {} -p {} {}'.format(
+            ' '.join(env_cmd),
+            redis_cli_cmd,
+            s_host,
+            s_port,
+            sub_cmd,
+        )
+        stdout = subprocess.check_output(command, shell=True)
+        outs = ''
+        outs = '\n'.join([outs, stdout])
+        self._print(outs)
+
+    def forget_noaddr(self):
+        """Forget noaddr nodes that is not used anymore in cluster
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('forget_noaddr')
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        meta = []
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                filtered_lines = (filter(lambda x: 'noaddr' in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        total_list = []
+        for line in filtered_lines:
+            total_list.append(line.split()[0])
+
+        # Remove duplicates
+        unique_list = list(set(total_list))
+
+        # Forget noaddr uuid
+        for uuid in unique_list:
+            sub_cmd = 'cluster forget "{id}" 2>&1'.format(id=uuid)
+            ret = RedisCliUtil.command_all_async(sub_cmd, slave=True)
+            count = 0
+            for _, host, port, res, stdout in ret:
+                if res == 'OK':
+                    count += 1
+                    pass
+                else:
+                    logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+            msg = '{num} nodes have forgot {id}'.format(num=count, id=uuid)
+            self._print(msg)
+
+    def find_noaddr(self):
+        """Find noaddr nodes that is not used anymore in cluster
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('find_noaddr')
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        meta = []
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                filtered_lines = (filter(lambda x: 'noaddr' in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        total_list = []
+        for line in filtered_lines:
+            total_list.append(line.split()[0])
+
+        # Remove duplicates
+        unique_list = list(set(total_list))
+        for uuid in unique_list:
+            meta.append([uuid])
+        utils.print_table([['UUID']] + meta)
+
+    def failover_list(self):
+        """ Find failovered|no-slave|no-slot masters and failbacked slaves
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('failover_list')
+        master_nodes = center.get_master_obj_list()
+        slave_nodes = center.get_slave_nodes()
+        master_ports = center.master_port_list
+        slave_ports = center.slave_port_list
+        output_msg = []
+
+        failovered_masters = []
+        for master_node in master_nodes:
+            addr = master_node['addr']
+            port = addr.split(':')[1]
+            try:
+                value = int(port)
+                if value in slave_ports:
+                    failovered_masters.append(addr)
+            except ValueError:
+                pass
+
+        noslave_masters = []
+        for master_node in master_nodes:
+            if len(master_node['slaves']) == 0:
+                noslave_masters.append(master_node['addr'])
+            else:
+                for slave_node in master_node['slaves']:
+                    if slave_node['status'] == 'disconnected':
+                        noslave_masters.append(master_node['addr'])
+                        break
+
+        noslot_masters = []
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                filtered_nodes = (filter(lambda x: 'myself,master' in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+        for line in filtered_nodes:
+            words = line.split()
+            if len(words) == 8:
+                noslot_masters.append(line.split()[1])
+
+        failbacked_slaves = []
+        for slave_nodes in slave_nodes:
+            port = slave_nodes.split(':')[1]
+            try:
+                value = int(port)
+                if value in master_ports:
+                    failbacked_slaves.append(slave_nodes)
+            except ValueError:
+                pass
+
+        output_msg.append('1) failovered masters:')
+        output_msg.extend(failovered_masters)
+        output_msg.append('')
+        output_msg.append('2) no-slave masters:')
+        output_msg.extend(noslave_masters)
+        output_msg.append('')
+        output_msg.append('3) no-slot masters:')
+        output_msg.extend(noslot_masters)
+        output_msg.append('')
+        output_msg.append('4) failbacked slaves:')
+        output_msg.extend(failbacked_slaves)
+        output_msg.append('')
+
+        logger.info(color.ENDC + '\n'.join(output_msg))
+
+    def distribution(self):
+        """Check the distribution of all masters and slaves
+        """
+        center = Center()
+        center.update_ip_port()
+        logger.debug('distribution')
+        ret = RedisCliUtil.command_all_async('cluster nodes', slave=True)
+        outs = ''
+        for _, host, port, res, stdout in ret:
+            if res == 'OK':
+                outs = '\n'.join([outs, stdout])
+                lines = outs.splitlines()
+                myself_key = 'myself'
+                filtered_lines = (filter(lambda x: myself_key in x, lines))
+            else:
+                logger.warning("FAIL {}:{} {}".format(host, port, stdout))
+
+        meta = []
+        total_masters = 0
+        total_slaves = 0
+        for nd in center.master_host_list:
+            num_of_masters = 0
+            num_of_slaves = 0
+            node = socket.gethostbyname(nd)
+
+            host_lines = (filter(lambda x: node in x, filtered_lines))
+            for node in host_lines:
+                params = node.split()
+                endpoint = params[1]
+                roles = params[2]
+                host = endpoint.split(':')[0]
+                role = roles.split(',')[1]
+                if role == 'master':
+                    if len(params) == 9:
+                        num_of_masters += 1
+                else:
+                    num_of_slaves += 1
+            total_masters += num_of_masters
+            total_slaves += num_of_slaves
+            hostname = str(socket.gethostbyaddr(host)[0]) + str('(') + str(host) + str(')')
+            meta.append(
+                [hostname,
+                num_of_masters,
+                num_of_slaves])
+
+        meta.append(
+            ['TOTAL',
+             total_masters,
+             total_slaves])
+        utils.print_table([['HOST', 'MASTER', 'SLAVE']] + meta)
+
     def rowcount(self):
         """Query and show cluster row count
         """
@@ -325,6 +825,14 @@ class Cluster(object):
         :param port: rebalance target port
         """
         rebalance_cluster_cmd(ip, port)
+
+    def check(self, ip, port):
+        """Check that all slots are allocated to the surviving node
+
+        :param ip: target ip
+        :param port: target port
+        """
+        check_cluster_cmd(ip,port)
 
     def add_slave(self, yes=False):
         """Add slave of cluster
