@@ -229,6 +229,20 @@ class Cluster(object):
         """
         logger.info(cluster_util.get_cluster_list())
 
+    def compare_ip(self, host1, host2):
+        """Compare the IPs of 2 severs and check if they're matched.
+
+        :param host1: IP or hostname
+        :param host2: IP or hostname
+        """
+        ip1 = socket.gethostbyname(host1)
+        ip2 = socket.gethostbyname(host2)
+
+        if ip1 == ip2:
+            return True
+        else:
+            return False
+
     def restart(
         self,
         force_stop=False,
@@ -302,6 +316,8 @@ class Cluster(object):
 
     def force_failover(self, server):
         """ Find all masters on the server and convert them to slaves. Finally, in the server, only slaves will be remained.
+
+        :param server: IP or hostname
         """
 
         logger.debug('force_failover')
@@ -327,7 +343,8 @@ class Cluster(object):
         for node in master_nodes:
             addr = node['addr']
             (host, port) = addr.split(':')
-            if host == server:
+            # if host == server:
+            if self.compare_ip(host, server):
                 for slave_node in node['slaves']:
                     addr = slave_node['addr']
                     (s_host, s_port) = addr.split(':')
@@ -347,6 +364,9 @@ class Cluster(object):
 
     def failover_with_dir(self, server, dir):
         """Find masters that use the specified directory path and do failover with its slave
+
+        :param server: IP or hostname
+        :param dir: directory path
         """
         center = Center()
         center.update_ip_port()
@@ -376,8 +396,8 @@ class Cluster(object):
             if res == 'OK':
                 flat_stdout = '\n'.join([outs, stdout])
                 line = flat_stdout.splitlines()
-                if host == server and dir in line[2]:
-                    endpoint = '{}:{}'.format(host, port)
+                if self.compare_ip(host, server) and dir in line[2]:
+                    endpoint = '{}:{}'.format(socket.gethostbyname(host), port)
                     if endpoint in m_endpoint:
                         meta.append(endpoint)
             else:
@@ -403,6 +423,9 @@ class Cluster(object):
 
     def masters_with_dir(self, server, dir):
         """Find masters that use the specified directory path
+
+        :param server: IP or hostname
+        :param dir: directory path
         """
         center = Center()
         center.update_ip_port()
@@ -418,8 +441,8 @@ class Cluster(object):
             if res == 'OK':
                 flat_stdout = '\n'.join([outs, stdout])
                 line = flat_stdout.splitlines()
-                if host == server and dir in line[2]:
-                    endpoint = '{}:{}'.format(host,port)
+                if self.compare_ip(host, server) and dir in line[2]:
+                    endpoint = '{}:{}'.format(socket.gethostbyname(host),port)
                     if endpoint in m_endpoint:
                         meta.append([host, port, line[2]])
             else:
@@ -428,6 +451,9 @@ class Cluster(object):
 
     def nodes_with_dir(self, server, dir):
         """Find nodes that use the specified directory path
+
+        :param server: IP or hostname
+        :param dir: directory path
         """
         center = Center()
         center.update_ip_port()
@@ -439,7 +465,7 @@ class Cluster(object):
             if res == 'OK':
                 flat_stdout = '\n'.join([outs, stdout])
                 line = flat_stdout.splitlines()
-                if host == server and dir in line[2]:
+                if self.compare_ip(host, server) and dir in line[2]:
                     meta.append([host, port, line[2]])
             else:
                 logger.warning("FAIL {}:{} {}".format(host, port, stdout))
@@ -492,11 +518,16 @@ class Cluster(object):
     def do_replicate(self, slave, master):
         """ Replicate a slave node to a master node.
             Use like 'cluster replicate {slave's ip}:{slave's port} {master's ip}:{master's port}
+
+        :param slave: {slave's ip or hostname}:{slave's port}
+        :param master: {master's ip or hostname}:{master's port}
         """
         logger.debug('do_replicate')
         # Get master's uuid
-        s_host, s_port = slave.split(':')
-        m_host, m_port = master.split(':')
+        s_hostname, s_port = slave.split(':')
+        m_hostname, m_port = master.split(':')
+        s_host = socket.gethostbyname(s_hostname)
+        m_host = socket.gethostbyname(m_hostname)
         cluster_id = config.get_cur_cluster_id()
         lib_path = config.get_ld_library_path(cluster_id)
         path_of_fb = config.get_path_of_fb(cluster_id)
@@ -521,7 +552,8 @@ class Cluster(object):
         outs = ''
         outs = '\n'.join([outs, stdout])
         lines = outs.splitlines()
-        filtered_lines = (filter(lambda x: master in x, lines))
+        m_ip_port = m_host + str(':') + m_port
+        filtered_lines = (filter(lambda x: m_ip_port in x, lines))
         if len(filtered_lines) == 0:
             msg = message.get('error_need_cluster_meet')
             self._print(msg)
@@ -551,7 +583,7 @@ class Cluster(object):
             outs = ''
             outs = '\n'.join([outs, stdout])
             lines = outs.splitlines()
-            filtered_lines = (filter(lambda x: master in x, lines))
+            filtered_lines = (filter(lambda x: m_ip_port in x, lines))
             m_uuid = filtered_lines[0].split()[0]
         else:
             m_uuid = filtered_lines[0].split()[0]
@@ -753,8 +785,9 @@ class Cluster(object):
                     num_of_slaves += 1
             total_masters += num_of_masters
             total_slaves += num_of_slaves
+            hostname = str(socket.gethostbyaddr(host)[0]) + str('(') + str(host) + str(')')
             meta.append(
-                [host,
+                [hostname,
                 num_of_masters,
                 num_of_slaves])
 
