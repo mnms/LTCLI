@@ -165,17 +165,41 @@ def _migr_keys(src_conn, target_host, target_port, slot):
 
 
 def _migr_slots(source_node, target_node, slots, nodes):
-    logging.info('Migrating %d slots from %s<%s:%d> to %s<%s:%d>', len(slots),
+    logging.info('Migrating %d slots(%d-%d) from %s<%s:%d> to %s<%s:%d>', len(slots),
+                 slots[0], slots[-1],
                  source_node.node_id, source_node.host, source_node.port,
                  target_node.node_id, target_node.host, target_node.port)
-    key_count = 0
-    for slot in slots:
-        key_count += _migr_one_slot(source_node, target_node, slot, nodes)
-    logging.info('Migrated: %d slots %d keys from %s<%s:%d> to %s<%s:%d>',
-                 len(slots), key_count, source_node.node_id, source_node.host,
+
+    slot_range = str(slots[0])+'-'+str(slots[-1])
+    key_count = _migr_slot_range(source_node, target_node, slot_range, nodes)
+    logging.info('Migrated: %s slots %d keys from %s<%s:%d> to %s<%s:%d>',
+                 slot_range, key_count, source_node.node_id, source_node.host,
                  source_node.port, target_node.node_id, target_node.host,
                  target_node.port)
 
+def _migr_slot_range(source_node, target_node, slot_range, nodes):
+    def expect_exec_ok(m, conn, slot_range):
+        if m.lower() != 'ok':
+            conn.raise_('\n'.join([
+                'Error while moving slot [ %s ] between' % slot_range,
+                'Source node - %s:%d' % (source_node.host, source_node.port),
+                'Target node - %s:%d' % (target_node.host, target_node.port),
+                'Got %s' % m
+            ]))
+
+    @retry(stop_max_attempt_number=16, wait_fixed=100)
+    def setslot_move_with_range(conn, slot_range, node_id):
+        m = conn.execute('cluster', 'setslot', slot_range, 'move-with-range', node_id)
+        expect_exec_ok(m, conn, slot_range)
+    source_conn = source_node.get_conn()
+
+    setslot_move_with_range(source_conn, slot_range, target_node.node_id)
+    for node in nodes:
+        if node.master:
+            setslot_move_with_range(node.get_conn(), slot_range, target_node.node_id)
+    sys.stdout.write('OK')
+    sys.stdout.flush()
+    return 0
 
 def _migr_one_slot(source_node, target_node, slot, nodes):
     def expect_exec_ok(m, conn, slot):
@@ -186,11 +210,6 @@ def _migr_one_slot(source_node, target_node, slot, nodes):
                 'Target node - %s:%d' % (target_node.host, target_node.port),
                 'Got %s' % m
             ]))
-
-    @retry(stop_max_attempt_number=16, wait_fixed=100)
-    def setslot_node(conn, slot, node_id):
-        m = conn.execute('cluster', 'setslot', slot, 'node', node_id)
-        expect_exec_ok(m, conn, slot)
 
     @retry(stop_max_attempt_number=16, wait_fixed=100)
     def setslot_move(conn, slot, node_id):
@@ -486,7 +505,7 @@ def list_masters(host, port, default_host=None):
         return _list_masters(t, default_host or host)
 
 
-def custom_migrate_slots(src, dst, slots):
+def custom_migrate_slots(src, dst, sorted_slots):
     src_host = src.info['ip']
     src_port = src.info['port']
     dst_host = dst.info['ip']
@@ -496,7 +515,7 @@ def custom_migrate_slots(src, dst, slots):
     with Connection(src_host, src_port) as t:
         nodes, myself = _list_masters(t, src_host)
 
-    slots = set(slots)
+    slots = set(sorted_slots)
     logging.debug('Migrating %s', slots)
     if not slots.issubset(set(myself.assigned_slots)):
         raise ValueError('Not all slot held by %s:%d' % (src_host, src_port))
@@ -504,7 +523,7 @@ def custom_migrate_slots(src, dst, slots):
     try:
         for n in nodes:
             if n.host == dst_host and n.port == dst_port:
-                return _migr_slots(myself, n, slots, nodes)
+                return _migr_slots(myself, n, sorted_slots, nodes)
         raise ValueError('Two nodes are not in the same cluster')
     finally:
         for n in nodes:

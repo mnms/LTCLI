@@ -1,5 +1,6 @@
 import os
 from functools import reduce
+import socket
 import time
 
 from ltcli import color, config, cluster_util, net, utils, message, ask_util
@@ -341,7 +342,7 @@ class Cluster(object):
         prev_hosts = m_hosts
         already_included = False
         for node in scaleout_hosts:
-            if node in m_hosts:
+            if node in m_hosts or socket.gethostbyname(node) in m_hosts:
                 already_included = True
                 break
 
