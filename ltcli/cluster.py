@@ -1,5 +1,6 @@
 import os
 from functools import reduce
+import copy
 import socket
 import time
 
@@ -335,25 +336,44 @@ class Cluster(object):
         path_of_fb = config.get_path_of_fb(curr_cluster_id)
         props_path = path_of_fb['redis_properties']
         m_key = 'sr2_redis_master_hosts'
-        m_hosts = config.get_props(props_path, m_key, [])
+        m_hosts = list()
+        m_hosts.extend(config.get_props(props_path, m_key, []))
         s_key = 'sr2_redis_slave_hosts'
-        s_hosts = config.get_props(props_path, s_key, [])
+        s_hosts = list()
+        s_hosts.extend(config.get_props(props_path, s_key, []))
 
-        prev_hosts = m_hosts
+        prev_hosts = copy.deepcopy(m_hosts)
         already_included = False
         for node in scaleout_hosts:
-            if node in m_hosts or socket.gethostbyname(node) in m_hosts:
+            already_included = False
+            tmphostname = socket.gethostbyname(node)
+            hostnames = socket.gethostbyaddr(tmphostname)
+            #name
+            host = hostnames[0]
+            if host in m_hosts:
                 already_included = True
-                break
+                prev_hosts.remove(host)
 
-        if already_included == False:
-            m_hosts = m_hosts + scaleout_hosts
-            config.make_key_enable(props_path, m_key)
-            config.set_props(props_path, m_key, m_hosts)
+            # aliaslist
+            for host in hostnames[1]:
+                if host in m_hosts:
+                    already_included = True
+                    prev_hosts.remove(host)
 
-            s_hosts = s_hosts + scaleout_hosts
-            config.make_key_enable(props_path, s_key)
-            config.set_props(props_path, s_key, s_hosts)
+            # addresslist
+            for host in hostnames[2]:
+                if host in m_hosts:
+                    already_included = True
+                    prev_hosts.remove(host)
+
+            if already_included == False:
+                m_hosts.append(node)
+                s_hosts.append(node)
+
+        config.make_key_enable(props_path, m_key)
+        config.set_props(props_path, m_key, m_hosts)
+        config.make_key_enable(props_path, s_key)
+        config.set_props(props_path, s_key, s_hosts)
 
         center = Center()
         center.update_ip_port()
