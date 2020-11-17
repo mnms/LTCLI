@@ -170,7 +170,10 @@ def _migr_slots(source_node, target_node, slots, nodes):
                  source_node.node_id, source_node.host, source_node.port,
                  target_node.node_id, target_node.host, target_node.port)
 
-    slot_range = str(slots[0])+'-'+str(slots[-1])
+    t = sorted(slots)
+    slot_range = str(t[0])+'-'+str(t[-1])
+
+    logger.info('slot_range: {}'.format(slot_range))
     key_count = _migr_slot_range(source_node, target_node, slot_range, nodes)
     logging.info('Migrated: %s slots %d keys from %s<%s:%d> to %s<%s:%d>',
                  slot_range, key_count, source_node.node_id, source_node.host,
@@ -518,7 +521,7 @@ def custom_migrate_slots(src, dst, sorted_slots):
     slots = set(sorted_slots)
     logging.debug('Migrating %s', slots)
     if not slots.issubset(set(myself.assigned_slots)):
-        raise ValueError('Not all slot held by %s:%d' % (src_host, src_port))
+        raise ValueError('Not all slot(%d-%d) held by %s:%d(%d-%d)' % (sorted_slots[0], sorted_slots[-1], src_host, src_port, myself.assigned_slots[0], myself.assigned_slots[-1]))
 
     try:
         for n in nodes:

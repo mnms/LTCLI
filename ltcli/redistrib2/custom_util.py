@@ -32,7 +32,7 @@ class PrettySlotGenerator(object):
 
     def generate(self, slots):
         key_list = slots.keys()
-        key_list.sort()
+        sorted(key_list)
         self.pretty_list = []
         buf = self._get_init_buf()
         for key in key_list:

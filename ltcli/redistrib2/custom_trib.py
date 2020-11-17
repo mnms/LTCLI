@@ -118,6 +118,7 @@ class RedisTrib(object):
             src_down = src.info['balance'] == 0
             dst_idx += dst_up
             src_idx -= src_down
+            # print('Slots ==> dst_up:%d, dst_idx:%d, src_down: %d, dst_idx: %d' % (dst_up, dst_idx, src_down, src_idx))
 
     def show_reshard_table(self, table):
         for row in table:
@@ -135,9 +136,11 @@ class RedisTrib(object):
         moved = []
         slots = src.info['slots']
         t = slots.keys()
-        t.sort()
-        for slot_num in t[0:int(num_slots)]:
+
+        sorted(t)
+        for slot_num in list(t)[0:int(num_slots)]:
             moved.append(slot_num)
+            del slots[slot_num]
         return moved
 
     def name_to_node(self, name):
