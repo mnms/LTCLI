@@ -8,7 +8,7 @@ from ltcli import color, config, cluster_util, net, utils, message, ask_util
 from ltcli.center import Center
 from ltcli.log import logger
 from ltcli.rediscli_util import RedisCliUtil
-from ltcli.redistrib2.custom_trib import rebalance_cluster_cmd
+from ltcli.redistrib2.custom_trib import rebalance_cluster_cmd, check_cluster_cmd
 from ltcli.exceptions import (
     ClusterIdError,
     ClusterNotExistError,
@@ -405,9 +405,6 @@ class Cluster(object):
         center.start_redis_process()
         center.wait_until_all_redis_process_up()
 
-        # cluster meet master nodes. 'cluster meet' for slaves is handled in replicate.
-        center.meet_new_nodes(scaleout_hosts)
-
         # change redis config temporarily
         key = 'cluster-node-timeout'
         origin_s_value = center.cli_config_get(key, s_hosts[0], s_ports[0])
@@ -419,8 +416,25 @@ class Cluster(object):
             logger.debug('set cluster node time out 2000 for create')
             center.cli_config_set_all(key, '2000', s_hosts, s_ports)
 
+        # cluster meet master nodes. 'cluster meet' for slaves is handled in replicate.
+        center.meet_new_nodes(scaleout_hosts)
+
         # do replicate
         center.replicate_with_scaleout_nodes(prev_hosts, scaleout_hosts)
+
+        is_synced = check_cluster_cmd(socket.gethostbyname(prev_hosts[0]), m_ports[0])
+        sync_cnt = 5
+        while is_synced == False:
+            print('Updated cluster info is not synced yet!!')
+            time.sleep(3)
+            if sync_cnt == 0:
+                print('Updated cluster info is not synced finally!!')
+                exit(1)
+            else:
+                is_synced = check_cluster_cmd(socket.gethostbyname(prev_hosts[0]), m_ports[0])
+                sync_cnt -= 1
+
+        print('Updated cluster info is synced!!')
 
         # rollback redis config
         if origin_s_value:
@@ -429,9 +443,13 @@ class Cluster(object):
             center.cli_config_set_all(key, origin_s_value, s_hosts, s_ports)
 
         # scale out
-        self.rebalance(m_hosts[0], m_ports[0])
-
-        self._print("OK")
+        msg = message.get('confirm_rabalance')
+        yes = ask_util.askBool(msg, ['y', 'n'])
+        if yes:
+            self.rebalance(m_hosts[0], m_ports[0])
+            self._print("OK")
+        else:
+            self._print("Fail")
 
     def rebalance(self, ip, port):
         """Rebalance cluster

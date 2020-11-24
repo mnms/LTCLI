@@ -519,7 +519,6 @@ def custom_migrate_slots(src, dst, sorted_slots):
         nodes, myself = _list_masters(t, src_host)
 
     slots = set(sorted_slots)
-    logging.debug('Migrating %s', slots)
     if not slots.issubset(set(myself.assigned_slots)):
         raise ValueError('Not all slot(%d-%d) held by %s:%d(%d-%d)' % (sorted_slots[0], sorted_slots[-1], src_host, src_port, myself.assigned_slots[0], myself.assigned_slots[-1]))
 

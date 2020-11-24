@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 
@@ -31,8 +33,7 @@ class PrettySlotGenerator(object):
         self.pretty_list = []
 
     def generate(self, slots):
-        key_list = slots.keys()
-        sorted(key_list)
+        key_list = slots
         self.pretty_list = []
         buf = self._get_init_buf()
         for key in key_list:

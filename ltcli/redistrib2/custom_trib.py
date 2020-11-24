@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 
 from .command import custom_migrate_slots
 from .custom_node import CustomClusterNode
@@ -56,7 +57,19 @@ class RedisTrib(object):
         threshold = rebalance_default_threshold
 
         self.load_cluster_info_from_node('%s:%s' % (ip, port))
-        self.check_cluster()
+        is_synced = self.check_cluster()
+        sync_cnt = 5
+        while is_synced == False:
+            print('Updated cluster info is not synced yet!!')
+            time.sleep(3)
+            if sync_cnt == 0:
+                print('Updated cluster info is not synced finally!!')
+                exit(1)
+            else:
+                is_synced = self.check_cluster()
+                sync_cnt -= 1
+
+        print('Updated cluster info is synced!!')
         master_nodes = self.master_nodes
         nodes_involved = len(master_nodes)
         total_weight = len(master_nodes)
@@ -136,9 +149,10 @@ class RedisTrib(object):
         moved = []
         slots = src.info['slots']
         t = slots.keys()
+        sorted_list = sorted(list(t))
 
         sorted(t)
-        for slot_num in list(t)[0:int(num_slots)]:
+        for slot_num in sorted_list[0:int(num_slots)]:
             moved.append(slot_num)
             del slots[slot_num]
         return moved
@@ -275,7 +289,9 @@ class RedisTrib(object):
         self.check_slots_coverage()
         if self.cluster_error:
             print('*** Please fix your cluster problems before execution')
-            exit(1)
+            return False
+        else:
+            return True
 
     def is_exist_master_node_id(self, node_id):
         for node in self.master_nodes:
@@ -302,5 +318,5 @@ def check_cluster_cmd(ip, port):
     logging.debug('check_cluster')
     rt = RedisTrib({'ip': ip, 'port': port})
     rt.load_cluster_info_from_node('%s:%s' % (ip, port))
-    rt.check_cluster()
-    return True
+    result = rt.check_cluster()
+    return result

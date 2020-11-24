@@ -74,9 +74,9 @@ class CustomClusterNode(object):
 
     @staticmethod
     def _get_pretty_slot_info(slots):
-        slots = slots
+        sorted_slots = sorted(slots)
         g = PrettySlotGenerator()
-        g.generate(slots)
+        g.generate(sorted_slots)
         return g.to_string()
 
     def _load_info(self, nodes_res_text, info_res_text, o):
