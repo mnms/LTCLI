@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 
 from .command import custom_migrate_slots
 from .custom_node import CustomClusterNode
@@ -56,7 +57,19 @@ class RedisTrib(object):
         threshold = rebalance_default_threshold
 
         self.load_cluster_info_from_node('%s:%s' % (ip, port))
-        self.check_cluster()
+        is_synced = self.check_cluster()
+        sync_cnt = 5
+        while is_synced == False:
+            print('Updated cluster info is not synced yet!!')
+            time.sleep(3)
+            if sync_cnt == 0:
+                print('Updated cluster info is not synced finally!!')
+                exit(1)
+            else:
+                is_synced = self.check_cluster()
+                sync_cnt -= 1
+
+        print('Updated cluster info is synced!!')
         master_nodes = self.master_nodes
         nodes_involved = len(master_nodes)
         total_weight = len(master_nodes)
@@ -71,7 +84,7 @@ class RedisTrib(object):
             if threshold > 0:
                 if slot_count > 0:
                     err_perc = abs(100 - (100.0 * expected / slot_count))
-                    print('err_perc:', err_perc)
+                    print('err_perc: %f' % err_perc)
                     over_threshold = err_perc > threshold
                 elif expected > 0:
                     over_threshold = True
@@ -110,6 +123,7 @@ class RedisTrib(object):
                 print('Moving %s slots from %s to %s' % (
                     num_slots, src_name, dst_name))
                 self.move_slots(src, dst, num_slots)
+                print('\n')
 
             dst.info['balance'] += num_slots
             src.info['balance'] -= num_slots
@@ -117,6 +131,7 @@ class RedisTrib(object):
             src_down = src.info['balance'] == 0
             dst_idx += dst_up
             src_idx -= src_down
+            # print('Slots ==> dst_up:%d, dst_idx:%d, src_down: %d, dst_idx: %d' % (dst_up, dst_idx, src_down, src_idx))
 
     def show_reshard_table(self, table):
         for row in table:
@@ -134,9 +149,12 @@ class RedisTrib(object):
         moved = []
         slots = src.info['slots']
         t = slots.keys()
-        t.sort()
-        for slot_num in t[0:int(num_slots)]:
+        sorted_list = sorted(list(t))
+
+        sorted(t)
+        for slot_num in sorted_list[0:int(num_slots)]:
             moved.append(slot_num)
+            del slots[slot_num]
         return moved
 
     def name_to_node(self, name):
@@ -271,14 +289,15 @@ class RedisTrib(object):
         self.check_slots_coverage()
         if self.cluster_error:
             print('*** Please fix your cluster problems before execution')
-            exit(1)
+            return False
+        else:
+            return True
 
     def is_exist_master_node_id(self, node_id):
         for node in self.master_nodes:
             if node_id == node.info['name']:
                 return True
         return False
-
 
 def rebalance_cluster_cmd(ip, port):
     logging.debug('rebalance')
@@ -299,5 +318,5 @@ def check_cluster_cmd(ip, port):
     logging.debug('check_cluster')
     rt = RedisTrib({'ip': ip, 'port': port})
     rt.load_cluster_info_from_node('%s:%s' % (ip, port))
-    rt.check_cluster()
-    return True
+    result = rt.check_cluster()
+    return result

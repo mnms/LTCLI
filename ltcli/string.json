@@ -1,5 +1,6 @@
 {
     "ask_hosts": "Please type hosts separated by comma(,)",
+    "ask_scaleout_hosts": "Please type hosts to scaleout separated by comma(,)",
     "ask_installer": [
         "Select installer",
         "",
@@ -153,5 +154,11 @@
     "check_cluster_state_assign_slot": "Check cluster state and assign slot...",
     "try_connection": "Connecting...",
     "loading_dataset": "LOADING Redis is loading the dataset in memory.",
-    "apply_after_restart": "Applies after restart."
+    "apply_after_restart": "Applies after restart.",
+    "error_no_uuid": "Fail to find the master's uuid.",
+    "error_need_cluster_meet": "The slave node is not belong to the cluster. Need 'cluster meet'.",
+    "start_replicate": "Start to replicate...",
+    "try_failover_takeover": "'{slave}' will be master...",
+    "empty_nodes_to_scaleout": "Nodes to scaleout are not definded.",
+    "confirm_rabalance": "New nodes are meeted and replicated. Do you want a scaleout?"
 }
