@@ -11,6 +11,7 @@ from time import sleep
 from ltcli import message
 from ltcli.log import logger
 from .clusternode import ClusterNode, base_balance_plan
+from .custom_util import PrettySlotGenerator
 from .connection import (
     CMD_CLUSTER_INFO,
     CMD_CLUSTER_NODES,
@@ -171,14 +172,20 @@ def _migr_slots(source_node, target_node, slots, nodes):
                  target_node.node_id, target_node.host, target_node.port)
 
     t = sorted(slots)
-    slot_range = str(t[0])+'-'+str(t[-1])
 
-    logger.info('slot_range: {}'.format(slot_range))
-    key_count = _migr_slot_range(source_node, target_node, slot_range, nodes)
-    logging.info('Migrated: %s slots %d keys from %s<%s:%d> to %s<%s:%d>',
-                 slot_range, key_count, source_node.node_id, source_node.host,
-                 source_node.port, target_node.node_id, target_node.host,
-                 target_node.port)
+    g = PrettySlotGenerator()
+    g.generate(t)
+    pretty_list = g.to_list()
+    size = len(pretty_list)
+    i = 0
+    for range in pretty_list:
+        logger.info('{} of {}, slot_range: {}'.format(i+1, size, range))
+        key_count = _migr_slot_range(source_node, target_node, range, nodes)
+        logging.info('Migrated: %s slots %d keys from %s<%s:%d> to %s<%s:%d>',
+                     range, key_count, source_node.node_id, source_node.host,
+                     source_node.port, target_node.node_id, target_node.host,
+                     target_node.port)
+        i += 1
 
 def _migr_slot_range(source_node, target_node, slot_range, nodes):
     def expect_exec_ok(m, conn, slot_range):

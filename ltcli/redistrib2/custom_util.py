@@ -69,6 +69,18 @@ class PrettySlotGenerator(object):
         msg += ' (%d slots)' % total
         return msg
 
+    def to_list(self, pretty_list=None):
+        if pretty_list is None:
+            pretty_list = self.pretty_list
+
+        slot_str_list = []
+        for item in pretty_list:
+            s = item['start']
+            e = item['end']
+            slot_str_list.append('%d-%d' % (s, e))
+
+        return slot_str_list
+
     def _get_init_buf(self):
         buf = {
             'start': -1,
