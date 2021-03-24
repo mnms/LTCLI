@@ -30,6 +30,18 @@ def hosts(save, default=None):
     logger.info('OK, {}'.format(result))
     return result
 
+def hosts_to_scaleout():
+    logger.debug('ask_scaleout_hosts')
+    default = None
+    deploy_history = config.get_deploy_history()
+    if not default:
+        default = deploy_history['hosts']
+    msg = message.get('ask_scaleout_hosts')
+    result = ask(msg, default=', '.join(default))
+    result = list(map(lambda x: x.strip(), result.split(',')))
+
+    logger.info('OK, {}'.format(result))
+    return result
 
 def installer():
     '''
@@ -340,6 +352,7 @@ def props(cluster_id, save):
     m_ports = master_ports(save, cluster_id)
     ret['master_ports'] = m_ports
     ret['replicas'] = replicas(save)
+
     m_count = len(m_ports)
     s_ports = slave_ports(cluster_id, m_count, ret['replicas'])
     ret['slave_ports'] = s_ports
