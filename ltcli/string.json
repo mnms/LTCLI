@@ -161,4 +161,5 @@
     "try_failover_takeover": "'{slave}' will be master...",
     "empty_nodes_to_scaleout": "Nodes to scaleout are not definded.",
     "confirm_rabalance": "New nodes are meeted and replicated. Do you want a scaleout?"
+    "try_failover_takeover": "'{slave}' will be master..."
 }

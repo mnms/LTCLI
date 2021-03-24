@@ -1222,6 +1222,10 @@ class Center(object):
         if not output:
             msg = message.get('all_redis_disconnected')
             raise ClusterRedisError(msg)
+        for result in output:
+            line_count = result.count("\n")
+            if line_count > 1:
+                return result
         return output[0]
 
     def ping(self, addr, t=3, c=3):
