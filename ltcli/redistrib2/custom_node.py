@@ -74,14 +74,13 @@ class CustomClusterNode(object):
 
     @staticmethod
     def _get_pretty_slot_info(slots):
-        sorted_slots = sorted(slots)
+        slots = slots
         g = PrettySlotGenerator()
-        g.generate(sorted_slots)
+        g.generate(slots)
         return g.to_string()
 
     def _load_info(self, nodes_res_text, info_res_text, o):
-        s = nodes_res_text.decode('utf-8').split('\n')
-
+        s = nodes_res_text.split('\n')
         for row in s:
             if len(row) > 0:
                 self._load_info_row(row, info_res_text, o)
@@ -136,7 +135,7 @@ class CustomClusterNode(object):
 
     @staticmethod
     def _load_cluster_info_text(info, info_res_text):
-        items = info_res_text.decode('utf-8').split('\n')
+        items = info_res_text.split('\n')
         for item in items:
             if len(item.strip()) == 0:
                 continue

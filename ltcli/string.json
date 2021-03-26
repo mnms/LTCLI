@@ -1,6 +1,5 @@
 {
     "ask_hosts": "Please type hosts separated by comma(,)",
-    "ask_scaleout_hosts": "Please type hosts to scaleout separated by comma(,)",
     "ask_installer": [
         "Select installer",
         "",
@@ -158,8 +157,5 @@
     "error_no_uuid": "Fail to find the master's uuid.",
     "error_need_cluster_meet": "The slave node is not belong to the cluster. Need 'cluster meet'.",
     "start_replicate": "Start to replicate...",
-    "try_failover_takeover": "'{slave}' will be master...",
-    "empty_nodes_to_scaleout": "Nodes to scaleout are not definded.",
-    "confirm_rabalance": "New nodes are meeted and replicated. Do you want a scaleout?"
     "try_failover_takeover": "'{slave}' will be master..."
 }

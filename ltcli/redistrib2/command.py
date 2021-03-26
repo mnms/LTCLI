@@ -11,7 +11,6 @@ from time import sleep
 from ltcli import message
 from ltcli.log import logger
 from .clusternode import ClusterNode, base_balance_plan
-from .custom_util import PrettySlotGenerator
 from .connection import (
     CMD_CLUSTER_INFO,
     CMD_CLUSTER_NODES,
@@ -166,50 +165,17 @@ def _migr_keys(src_conn, target_host, target_port, slot):
 
 
 def _migr_slots(source_node, target_node, slots, nodes):
-    logging.info('Migrating %d slots(%d-%d) from %s<%s:%d> to %s<%s:%d>', len(slots),
-                 slots[0], slots[-1],
+    logging.info('Migrating %d slots from %s<%s:%d> to %s<%s:%d>', len(slots),
                  source_node.node_id, source_node.host, source_node.port,
                  target_node.node_id, target_node.host, target_node.port)
+    key_count = 0
+    for slot in slots:
+        key_count += _migr_one_slot(source_node, target_node, slot, nodes)
+    logging.info('Migrated: %d slots %d keys from %s<%s:%d> to %s<%s:%d>',
+                 len(slots), key_count, source_node.node_id, source_node.host,
+                 source_node.port, target_node.node_id, target_node.host,
+                 target_node.port)
 
-    t = sorted(slots)
-
-    g = PrettySlotGenerator()
-    g.generate(t)
-    pretty_list = g.to_list()
-    size = len(pretty_list)
-    i = 0
-    for range in pretty_list:
-        logger.info('{} of {}, slot_range: {}'.format(i+1, size, range))
-        key_count = _migr_slot_range(source_node, target_node, range, nodes)
-        logging.info('Migrated: %s slots %d keys from %s<%s:%d> to %s<%s:%d>',
-                     range, key_count, source_node.node_id, source_node.host,
-                     source_node.port, target_node.node_id, target_node.host,
-                     target_node.port)
-        i += 1
-
-def _migr_slot_range(source_node, target_node, slot_range, nodes):
-    def expect_exec_ok(m, conn, slot_range):
-        if m.lower() != 'ok':
-            conn.raise_('\n'.join([
-                'Error while moving slot [ %s ] between' % slot_range,
-                'Source node - %s:%d' % (source_node.host, source_node.port),
-                'Target node - %s:%d' % (target_node.host, target_node.port),
-                'Got %s' % m
-            ]))
-
-    @retry(stop_max_attempt_number=16, wait_fixed=100)
-    def setslot_move_with_range(conn, slot_range, node_id):
-        m = conn.execute('cluster', 'setslot', slot_range, 'move-with-range', node_id)
-        expect_exec_ok(m, conn, slot_range)
-    source_conn = source_node.get_conn()
-
-    setslot_move_with_range(source_conn, slot_range, target_node.node_id)
-    for node in nodes:
-        if node.master:
-            setslot_move_with_range(node.get_conn(), slot_range, target_node.node_id)
-    sys.stdout.write('OK')
-    sys.stdout.flush()
-    return 0
 
 def _migr_one_slot(source_node, target_node, slot, nodes):
     def expect_exec_ok(m, conn, slot):
@@ -222,18 +188,38 @@ def _migr_one_slot(source_node, target_node, slot, nodes):
             ]))
 
     @retry(stop_max_attempt_number=16, wait_fixed=100)
-    def setslot_move(conn, slot, node_id):
-        m = conn.execute('cluster', 'setslot', slot, 'move', node_id)
+    def setslot_stable(conn, slot, node_id):
+        m = conn.execute('cluster', 'setslot', slot, 'node', node_id)
         expect_exec_ok(m, conn, slot)
-    source_conn = source_node.get_conn()
 
-    setslot_move(source_conn, slot, target_node.node_id)
+    source_conn = source_node.get_conn()
+    target_conn = target_node.get_conn()
+
+    try:
+        expect_exec_ok(
+            target_conn.execute('cluster', 'setslot', slot, 'importing',
+                                source_node.node_id), target_conn, slot)
+    except hiredis.ReplyError as e:
+        if 'already the owner of' not in str(e):
+            target_conn.raise_(str(e))
+
+    try:
+        expect_exec_ok(
+            source_conn.execute('cluster', 'setslot', slot, 'migrating',
+                                target_node.node_id), source_conn, slot)
+    except hiredis.ReplyError as e:
+        if 'not the owner of' not in str(e):
+            source_conn.raise_(str(e))
+
+    keys = _migr_keys(source_conn, target_node.host, target_node.port, slot)
+    setslot_stable(source_conn, slot, target_node.node_id)
     for node in nodes:
         if node.master:
-            setslot_move(node.get_conn(), slot, target_node.node_id)
+            setslot_stable(node.get_conn(), slot, target_node.node_id)
     sys.stdout.write('#')
     sys.stdout.flush()
-    return 0
+    return keys
+
 
 @retry(stop_max_attempt_number=8, wait_fixed=500)
 def _meet(clst, new):
@@ -415,29 +401,6 @@ def _check_slave(slave_host, slave_port, t):
                 return
             t.raise_('%s not switched to a slave' % slave_addr)
 
-def meet_new_nodes(curr_host, curr_port, new_host, new_port):
-    with Connection(new_host, new_port) as t, \
-            Connection(curr_host, curr_port) as curr_conn:
-        _ensure_cluster_status_set(curr_conn)
-        _meet(curr_conn, t)
-        _poll_check_status(t)
-        logging.info('Instance at %s:%d has joined %s:%d; now set replica',
-                     new_host, new_port, curr_host, curr_port)
-
-def replicate_scaleout_nodes(master_host, master_port, slave_host, slave_port):
-    with Connection(slave_host, slave_port) as t, \
-            Connection(master_host, master_port) as master_conn:
-        _ensure_cluster_status_set(master_conn)
-        _ensure_cluster_status_set(t)
-        myself = _list_nodes(master_conn)[1]
-        myid = myself.node_id if myself.master else myself.master_id
-
-        _replicate(t, myid)
-        _check_slave(slave_host, slave_port, master_conn)
-
-        _poll_check_status(master_conn)
-        logging.info('Instance at %s:%d set as replica to %s', slave_host,
-                     slave_port, myid)
 
 def replicate(master_host, master_port, slave_host, slave_port):
     with Connection(slave_host, slave_port) as t, \
@@ -515,7 +478,7 @@ def list_masters(host, port, default_host=None):
         return _list_masters(t, default_host or host)
 
 
-def custom_migrate_slots(src, dst, sorted_slots):
+def custom_migrate_slots(src, dst, slots):
     src_host = src.info['ip']
     src_port = src.info['port']
     dst_host = dst.info['ip']
@@ -525,14 +488,15 @@ def custom_migrate_slots(src, dst, sorted_slots):
     with Connection(src_host, src_port) as t:
         nodes, myself = _list_masters(t, src_host)
 
-    slots = set(sorted_slots)
+    slots = set(slots)
+    logging.debug('Migrating %s', slots)
     if not slots.issubset(set(myself.assigned_slots)):
-        raise ValueError('Not all slot(%d-%d) held by %s:%d(%d-%d)' % (sorted_slots[0], sorted_slots[-1], src_host, src_port, myself.assigned_slots[0], myself.assigned_slots[-1]))
+        raise ValueError('Not all slot held by %s:%d' % (src_host, src_port))
 
     try:
         for n in nodes:
             if n.host == dst_host and n.port == dst_port:
-                return _migr_slots(myself, n, sorted_slots, nodes)
+                return _migr_slots(myself, n, slots, nodes)
         raise ValueError('Two nodes are not in the same cluster')
     finally:
         for n in nodes:

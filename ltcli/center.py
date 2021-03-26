@@ -966,78 +966,6 @@ class Center(object):
                 ])
         return ret
 
-    def meet_new_nodes(self, new_hosts):
-        m_hosts = self.master_host_list
-        m_ports = self.master_port_list
-        s_ports = self.slave_port_list
-        for node in new_hosts:
-            m_host = socket.gethostbyname(node)
-            for m_port in m_ports:
-                trib.meet_new_nodes(m_hosts[0], m_ports[0], m_host, m_port)
-
-            for s_port in s_ports:
-                trib.meet_new_nodes(m_hosts[0], m_ports[0], m_host, s_port)
-
-    def _get_scaleout_master_slave_pair_list(self, prev_hosts, scaleout_hosts):
-        prev_len = len(prev_hosts)
-        scaleout_len = len(scaleout_hosts)
-        m_port_count = len(self.master_port_list)
-
-        ret = []
-        if scaleout_len > 1:
-            # replicate inside the scaleout hosts
-            for i, m_host in enumerate(scaleout_hosts):
-                for j, s_port in enumerate(self.slave_port_list):
-                    master_port_idx = j % m_port_count
-                    slave_host_idx = (i + 1 + j // m_port_count) % scaleout_len
-                    ret.append([
-                        m_host,  # master host
-                        self.master_port_list[master_port_idx],  # master port
-                        scaleout_hosts[slave_host_idx],  # slave host
-                        s_port  # slave port
-                    ])
-        else:
-            # replicate with current hosts
-            scaleout_host = scaleout_hosts[0]
-
-            # last master in curr & slave in scaleout
-            for j, s_port in enumerate(self.slave_port_list):
-                master_port_idx = j % m_port_count
-                ret.append([
-                    prev_hosts[prev_len - 1],  # last master host
-                    self.master_port_list[master_port_idx],  # last master port
-                    scaleout_host,  # scaleout slave host
-                    s_port  # scaleout slave port
-                ])
-
-            # master in scaleout & first slave in curr
-            for j, s_port in enumerate(self.slave_port_list):
-                master_port_idx = j % m_port_count
-                ret.append([
-                    scaleout_host,  # scaleout master host
-                    self.master_port_list[master_port_idx],  # scaleout master port
-                    prev_hosts[0],  # first slave host
-                    s_port  # first slave port
-                ])
-
-        return ret
-    @staticmethod
-    def _replicate_scaleout_thread(m_ip, m_port, s_ip, s_port, fail_list):
-        msg = message.get('try_replicate')
-        m_addr = "{}:{}".format(m_ip, m_port)
-        s_addr = "{}:{}".format(s_ip, s_port)
-        msg = msg.format(master_addr=m_addr, slave_addr=s_addr)
-        logger.info(msg)
-        try:
-            m_ip = net.get_ip(m_ip)
-            s_ip = net.get_ip(s_ip)
-            trib.replicate_scaleout_nodes(m_ip, m_port, s_ip, s_port)
-        except Exception as ex:
-            msg = message.get('error_replicate')
-            msg = msg.format(master_addr=m_addr, slave_addr=s_addr)
-            logger.error('\n'.join([msg, str(ex)]))
-            fail_list.append((m_ip, m_port, s_ip, s_port))
-
     @staticmethod
     def _replicate_thread(m_ip, m_port, s_ip, s_port, fail_list):
         msg = message.get('try_replicate')
@@ -1062,27 +990,6 @@ class Center(object):
         for m_ip, m_port, s_ip, s_port in pair_list:
             t = Thread(
                 target=Center._replicate_thread,
-                args=(m_ip, m_port, s_ip, s_port, fail_list)
-            )
-            threads.append(t)
-        for x in threads:
-            time.sleep(0.02)
-            x.start()
-        for x in threads:
-            x.join()
-        total_count = len(threads)
-        msg = message.get('complete_replicate')
-        success_count = total_count - len(fail_list)
-        msg = msg.format(success=success_count, total=total_count)
-        logger.info(msg)
-
-    def replicate_with_scaleout_nodes(self, prev_hosts, scaleout_hosts):
-        threads = []
-        fail_list = []
-        pair_list = self._get_scaleout_master_slave_pair_list(prev_hosts, scaleout_hosts)
-        for m_ip, m_port, s_ip, s_port in pair_list:
-            t = Thread(
-                target=Center._replicate_scaleout_thread,
                 args=(m_ip, m_port, s_ip, s_port, fail_list)
             )
             threads.append(t)
