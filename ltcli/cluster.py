@@ -771,7 +771,7 @@ class Cluster(object):
             num_of_slaves = 0
             node = socket.gethostbyname(nd)
 
-            host_lines = (filter(lambda x: node in x, filtered_lines))
+            host_lines = (filter(lambda x: (node + ':') in x, filtered_lines))
             for node in host_lines:
                 params = node.split()
                 endpoint = params[1]
