@@ -187,7 +187,7 @@ class Center(object):
                     target,
                 ))
         if slave and self.slave_port_list:
-            template = 'redis-slave.conf.template'
+            template = 'redis-master.conf.template'
             template_path = os.path.join(conf_path, template)
             for port in self.slave_port_list:
                 # depence: [Errno 7] Argument list too long

@@ -127,7 +127,6 @@
     ],
     "conf_cluster": "Edit 'redis.properties' of cluster",
     "conf_master": "Edit 'redis-master.conf.template'",
-    "conf_slave": "Edit 'redis-slave.conf.template'",
     "conf_thriftserver": "Edit 'thriftserver.properties'",
     "thriftserver": "Thriftserver command",
     "thriftserver_beeline": "Connect to thriftserver command line",

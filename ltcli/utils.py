@@ -191,7 +191,6 @@ def get_full_path_of_props(cluster_id=-1, target='config'):
     targets = {
         'config': 'config.yaml',
         'master': 'tsr2-conf/redis-master.conf.template',
-        'slave': 'tsr2-conf/redis-slave.conf.template',
         'thriftserver': 'tsr2-conf/thriftserver.properties',
     }
     home = config.get_repo_cluster_path(cluster_id)

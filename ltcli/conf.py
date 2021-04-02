@@ -49,23 +49,6 @@ class Conf(object):
             msg = message.get('complete_conf_edit')
             logger.info(msg)
 
-    def slave(self):
-        """Edit 'redis-slave.conf.template'
-        """
-        cluster_id = config.get_cur_cluster_id()
-        path_of_fb = config.get_path_of_fb(cluster_id)
-        target_path = path_of_fb['slave_template']
-        self._edit_conf(target_path, syntax='sh')
-        center = Center()
-        center.update_ip_port()
-        success = center.check_hosts_connection()
-        if not success:
-            return
-        success = center.sync_file(target_path)
-        if success:
-            msg = message.get('complete_conf_edit')
-            logger.info(msg)
-
     def thriftserver(self):
         """Edit 'thriftserver.properties'
         """
