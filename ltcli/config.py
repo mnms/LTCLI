@@ -318,7 +318,6 @@ def get_path_of_fb(cluster_id):
     conf_path = os.path.join(sr2_home, 'conf')
     redis_properties = os.path.join(conf_path, 'redis.properties')
     master_template = os.path.join(conf_path, 'redis-master.conf.template')
-    slave_template = os.path.join(conf_path, 'redis-slave.conf.template')
     thrift_properties = os.path.join(conf_path, 'thriftserver.properties')
     sr2_redis_log = os.path.join(sr2_home, 'logs', 'redis')
     sr2_redis_conf = os.path.join(sr2_home, 'conf', 'redis')
@@ -334,7 +333,6 @@ def get_path_of_fb(cluster_id):
         'release_path': release_path,
         'redis_properties': redis_properties,
         'master_template': master_template,
-        'slave_template': slave_template,
         'thrift_properties': thrift_properties,
         'sr2_redis_home': sr2_home,
         'sr2_redis_log': sr2_redis_log,
