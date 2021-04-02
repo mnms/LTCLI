@@ -1,6 +1,6 @@
 __title__ = 'ltcli'
 __description__ = 'Command line tool for LightningDB'
 __url__ = 'https://lightningdb.io/'
-__version__ = '1.1.10'
+__version__ = '1.1.11'
 __author__ = 'LightningDB'
 __email__ = 'lightningdb@sktelecom.com'
