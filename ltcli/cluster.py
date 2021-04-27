@@ -801,22 +801,57 @@ class Cluster(object):
         """Query and show cluster row count
         """
         logger.debug('rowcount')
+
+        masters = []
+        center = Center()
+        center.update_ip_port()
+        master_nodes = center.get_master_obj_list()
+        for master_node in master_nodes:
+            node = master_node['addr']
+            masters.append(node)
+
         # open-redis-cli-all info Tablespace | grep totalRows | awk -F ',
         # ' '{print $4}' | awk -F '=' '{sum += $2} END {print sum}'
-        ret = RedisCliUtil.command_all_async('info Tablespace', slave=False)
+        ret = RedisCliUtil.command_all_async('info Tablespace', slave=True)
         outs = ''
         for _, host, port, res, stdout in ret:
             if res == 'OK':
-                outs = '\n'.join([outs, stdout])
+                endpoint = '{}:{}'.format(host, port)
+                if endpoint in masters:
+                    outs = '\n'.join([outs, stdout])
             else:
                 logger.warning("FAIL {}:{} {}".format(host, port, stdout))
         lines = outs.splitlines()
+
+
         key = 'totalRows'
+        partitions = 'partitions'
+        evictions = 'evictedRows'
         filtered_lines = (filter(lambda x: key in x, lines))
-        ld = RedisCliUtil.to_list_of_dict(filtered_lines)
-        # row_count = reduce(lambda x, y: {key: int(x[key]) + int(y[key])}, ld)
-        row_count = reduce(lambda x, y: x + int(y[key]), ld, 0)
-        self._print(row_count)
+        #self._print(filtered_lines)
+
+        # Table list
+        table_list = []
+        result = []
+        for line in filtered_lines:
+            tableStats, _ = line.split(':')
+            tableId = tableStats.split('_')
+            if tableId[1] in table_list:
+                pass
+            else:
+                table_list.append(tableId[1])
+
+        for tid in table_list:
+            table_lines = (filter(lambda x: tid in x, filtered_lines))
+            ld = RedisCliUtil.to_list_of_dict(table_lines)
+            row_count = reduce(lambda x, y: x + int(y[key]), ld, 0)
+            partitions_count = reduce(lambda x, y: x + int(y[partitions]), ld, 0)
+            evictions_count = reduce(lambda x, y: x + int(y[evictions]), ld, 0)
+            result.append([tid, row_count, partitions_count, evictions_count])
+
+        utils.print_table([['Table_ID', 'ROW_COUNT', 'PARTITION_COUNT', 'EVICTED_ROWS']] + result)
+
+
 
     def rebalance(self, ip, port):
         """Rebalance cluster
